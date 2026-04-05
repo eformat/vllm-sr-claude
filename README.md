@@ -148,7 +148,7 @@ Check which model handled it with `| jq .model`.
 
 | Priority | Signal | Keywords | Routes to | Reasoning |
 |----------|--------|----------|-----------|-----------|
-| 100 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus | enabled |
+| 95 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus | enabled |
 | 90 | deep_analysis_keywords | analyze, explain why, compare, evaluate, critique, pros and cons, trade-offs, implications, nuance... | claude-sonnet | enabled |
 | 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 | disabled |
 | 1 | (default) | everything else | kimi-k2-5 | disabled |
