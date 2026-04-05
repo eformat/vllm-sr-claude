@@ -20,6 +20,28 @@ Semantic router setup that routes requests between Kimi K2-5 (internal maas host
 - **Grafana dashboard** -- real-time metrics: request count, QPS, success rate, latency percentiles, token usage
 - **Zero external dependencies** -- all sidecars are stdlib Python, no pip installs required
 
+## For the impatient
+
+```bash
+export GCP_PROJECT_ID=<your-gcp-project-id>
+export TOKEN=<your-maas-bearer-token>
+export KIMI_HOST=<your-kimi-maas-hostname>
+export HF_TOKEN=<your-hf-token optional but faster model first download for vllm-sr>
+
+cd /home/mike/git/vllm-sr-claude
+./startup.sh
+./startup.sh --test
+./startup.sh --stop
+
+unset CLAUDE_CODE_USE_VERTEX
+unset CLOUD_ML_REGION
+unset ANTHROPIC_VERTEX_PROJECT_ID
+export ANTHROPIC_BASE_URL="http://localhost:8819"
+export ANTHROPIC_API_KEY="fake"
+
+claude --model=claude-sonnet-4-6
+```
+
 ## Architecture
 
 ```
