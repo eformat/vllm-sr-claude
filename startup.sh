@@ -83,7 +83,7 @@ if [ "${1:-}" == "--test" ]; then
     fi
 
     # OpenAI API — analysis request → should route to claude-sonnet (with reasoning)
-    ANALYSIS_RESP=$(curl -s --max-time 90 http://localhost:8899/v1/chat/completions \
+    ANALYSIS_RESP=$(curl -s --max-time 180 http://localhost:8899/v1/chat/completions \
         -H "Content-Type: application/json" \
         -d '{"model":"auto","messages":[{"role":"user","content":"analyze the pros and cons of monoliths vs microservices"}],"max_tokens":50}' 2>&1)
     ANALYSIS_MODEL=$(echo "$ANALYSIS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('model',''))" 2>/dev/null || true)
@@ -96,7 +96,7 @@ if [ "${1:-}" == "--test" ]; then
     fi
 
     # OpenAI API — architecture request → should route to claude-opus
-    OPUS_RESP=$(curl -s --max-time 90 http://localhost:8899/v1/chat/completions \
+    OPUS_RESP=$(curl -s --max-time 180 http://localhost:8899/v1/chat/completions \
         -H "Content-Type: application/json" \
         -d '{"model":"auto","messages":[{"role":"user","content":"architect a distributed event-driven system design"}],"max_tokens":50}' 2>&1)
     OPUS_MODEL=$(echo "$OPUS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('model',''))" 2>/dev/null || true)
@@ -245,7 +245,7 @@ start_container vllm-sr-container \
     -v "${ROUTER_CONFIG_PROCESSED}:/app/config.yaml:z" \
     -v "${SCRIPT_DIR}/.vllm-sr:/app/.vllm-sr:z" \
     -v "${MODELS_CACHE}:/app/models:z" \
-    ghcr.io/vllm-project/semantic-router/vllm-sr:latest || exit 1
+    quay.io/eformat/vllm-sr:latest || exit 1
 
 # --- 2. Sidecars (parallel) ---
 

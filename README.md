@@ -5,7 +5,7 @@ A novel approach to saving tokens using vllm semantic router.
 1. Content-aware routing (keyword signals → model selection)
 2. Cross-provider support (Kimi + Claude Sonnet + Claude Opus via Vertex AI)
 3. Protocol translation (Anthropic API → OpenAI API via the proxy sidecar)
-4. Per-route reasoning control
+4. Per-route reasoning control with Anthropic extended thinking
 5. Full observability stack (Prometheus + Grafana)
 
 Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted), Claude Sonnet 4.6, and Claude Opus 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard.
@@ -15,6 +15,7 @@ Semantic router setup that routes requests between Kimi K2-5 (internal maas host
 - **OpenAI-compatible API** -- any OpenAI client works on port 8899 with `model: "auto"`
 - **Auto-refreshing GCP tokens** -- sidecar mints fresh Vertex AI tokens from ADC, no container restarts needed
 - **Vertex AI body patching** -- Envoy Lua filter injects `anthropic_version`, strips `model`, rewrites auth headers per-request
+- **Anthropic extended thinking** -- when `use_reasoning: true` is set for a routing decision, the router enables Anthropic's extended thinking (chain-of-thought) for Claude models via Vertex AI. Thinking content is returned as `reasoning_content` in the OpenAI-compatible response format
 - **Cost optimization** -- defaults to Kimi (internal maas hosted) for coding and general tasks, routes to Sonnet for analysis, Opus only for complex architecture/design
 - **Grafana dashboard** -- real-time metrics: request count, QPS, success rate, latency percentiles, token usage
 - **Zero external dependencies** -- all sidecars are stdlib Python, no pip installs required
@@ -161,7 +162,7 @@ Check which model handled it with `| jq .model`.
 | 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 | disabled |
 | 1 | (default) | everything else | kimi-k2-5 | disabled |
 
-Reasoning provides chain-of-thought for complex tasks at higher latency/cost. Disabled for fast coding responses.
+Reasoning enables Anthropic's extended thinking for complex tasks at higher latency/cost. When enabled, the router injects a `thinking` block with a 10,000-token budget into the Anthropic API request. The thinking output is returned as `reasoning_content` in the OpenAI-compatible response, with token usage reported in `completion_tokens_details.reasoning_tokens`. Disabled for fast coding responses.
 
 ## Dashboard
 
@@ -172,6 +173,13 @@ Shows: Total Requests, Average QPS, Success Rate, Request Latency (P50/P95/P99),
 ## Token refresh
 
 The `gcp-token-server` sidecar reads the ADC refresh token (which doesn't expire) and serves fresh access tokens on `GET /token`. Envoy's Lua filter calls this on every Claude request. No container restarts needed for token expiry.
+
+## Patched router image
+
+This project uses a patched vllm-sr image (`quay.io/eformat/vllm-sr:latest`) that adds Anthropic extended thinking support. The upstream router does not pass `use_reasoning` through to Anthropic models — the patched binary enables the `thinking` parameter for Claude models routed via Vertex AI.
+
+See [hack/README.md](hack/README.md) for build instructions and the source diff:
+- https://github.com/vllm-project/semantic-router/compare/main...eformat:semantic-router:fix-anthropic-thinking
 
 ## Teardown
 

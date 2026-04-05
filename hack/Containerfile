@@ -1,0 +1,5 @@
+# Patched vllm-sr image with Anthropic thinking/reasoning support
+# Based on upstream image, replaces only the Go router binary
+FROM ghcr.io/vllm-project/semantic-router/vllm-sr:latest
+
+COPY router /usr/local/bin/router
