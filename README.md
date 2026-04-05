@@ -1,5 +1,13 @@
 # vllm-sr with Claude (Vertex AI) + Kimi K2-5
 
+A novel approach to saving tokens using vllm semantic router.
+
+1. Content-aware routing (keyword signals → model selection)
+2. Cross-provider support (Kimi + Claude Sonnet + Claude Opus via Vertex AI)
+3. Protocol translation (Anthropic API → OpenAI API via the proxy sidecar)
+4. Per-route reasoning control
+5. Full observability stack (Prometheus + Grafana)
+
 Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted), Claude Sonnet 4.6, and Claude Opus 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard.
 
 - **Semantic routing** -- requests are automatically routed to the best model based on keywords (coding to Kimi, analysis to Sonnet, architecture/design to Opus - totally configurable using vllm-sr config)
