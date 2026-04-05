@@ -58,17 +58,28 @@ vllm-sr-config.yaml              # Semantic router config (models, routing decis
 ## Prerequisites
 
 1. **GCP Application Default Credentials** (for Claude via Vertex AI):
+
+    Uses Google Vertex Auth.
+
    ```bash
    gcloud auth application-default login
    ```
+
    This creates `~/.config/gcloud/application_default_credentials.json` with a refresh token that doesn't expire.
 
-2. **TOKEN** env var set for Kimi K2-5 auth:
+2. **Environment variables**:
+
+    Set these before startup.
+
    ```bash
+   export GCP_PROJECT_ID=<your-gcp-project-id>
    export TOKEN=<your-maas-bearer-token>
+   export KIMI_HOST=<your-kimi-maas-hostname>
    ```
 
 ## Startup
+
+Start pods using podman.
 
 ```bash
 # Start all services (parallel container launch)
@@ -86,6 +97,8 @@ Services started: vllm-sr (semantic router), gcp-token-server, envoy, anthropic-
 On first run, the router downloads ~7G of classifier models (intent, PII, jailbreak, embedding) to `~/.cache/vllm-sr/models`. These are cached outside the project so they persist across cleanups and are not re-downloaded on subsequent starts. To reclaim disk space: `rm -rf ~/.cache/vllm-sr/models` (they will re-download on next startup).
 
 ## Using with Claude Code
+
+Route Claude Code to vllm-sr locally.
 
 ```bash
 unset CLAUDE_CODE_USE_VERTEX
