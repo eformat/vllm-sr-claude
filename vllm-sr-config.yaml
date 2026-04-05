@@ -173,7 +173,7 @@ routing:
             name: deep_analysis_keywords
       modelRefs:
         - model: claude-sonnet
-          use_reasoning: false
+          use_reasoning: true
 
     - name: coding-route
       description: Route coding tasks to Kimi (internal, cheaper)

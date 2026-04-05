@@ -134,18 +134,26 @@ curl -s http://localhost:8899/v1/chat/completions \
 curl -s http://localhost:8899/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"auto","messages":[{"role":"user","content":"what is the capital of France?"}],"max_tokens":50}'
+
+# Force specific model with reasoning
+# Sonnet with reasoning enabled (analysis response will include thinking)
+curl -s http://localhost:8899/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet","messages":[{"role":"user","content":"explain why recursion is useful"}],"max_tokens":200}'
 ```
 
 Check which model handled it with `| jq .model`.
 
 ## Routing rules
 
-| Priority | Signal | Keywords | Routes to |
-|----------|--------|----------|-----------|
-| 100 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus |
-| 90 | deep_analysis_keywords | analyze, explain why, compare, evaluate, critique, pros and cons, trade-offs, implications, nuance... | claude-sonnet |
-| 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 |
-| 1 | (default) | everything else | kimi-k2-5 |
+| Priority | Signal | Keywords | Routes to | Reasoning |
+|----------|--------|----------|-----------|-----------|
+| 100 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus | enabled |
+| 90 | deep_analysis_keywords | analyze, explain why, compare, evaluate, critique, pros and cons, trade-offs, implications, nuance... | claude-sonnet | enabled |
+| 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 | disabled |
+| 1 | (default) | everything else | kimi-k2-5 | disabled |
+
+Reasoning provides chain-of-thought for complex tasks at higher latency/cost. Disabled for fast coding responses.
 
 ## Dashboard
 

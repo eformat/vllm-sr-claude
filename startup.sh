@@ -82,8 +82,8 @@ if [ "${1:-}" == "--test" ]; then
         FAIL=$((FAIL + 1))
     fi
 
-    # OpenAI API — analysis request → should route to claude-sonnet
-    ANALYSIS_RESP=$(curl -s --max-time 60 http://localhost:8899/v1/chat/completions \
+    # OpenAI API — analysis request → should route to claude-sonnet (with reasoning)
+    ANALYSIS_RESP=$(curl -s --max-time 90 http://localhost:8899/v1/chat/completions \
         -H "Content-Type: application/json" \
         -d '{"model":"auto","messages":[{"role":"user","content":"analyze the pros and cons of monoliths vs microservices"}],"max_tokens":50}' 2>&1)
     ANALYSIS_MODEL=$(echo "$ANALYSIS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('model',''))" 2>/dev/null || true)
