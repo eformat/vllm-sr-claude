@@ -42,6 +42,17 @@ providers:
           auth_prefix: Bearer
           api_key_env: GCP_ACCESS_TOKEN
           weight: 100
+    - name: claude-opus
+      provider_model_id: claude-opus-4-6
+      api_format: anthropic
+      backend_refs:
+        - name: vertex-opus
+          base_url: https://us-east5-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-opus-4-6/v1
+          provider: openai
+          auth_header: Authorization
+          auth_prefix: Bearer
+          api_key_env: GCP_ACCESS_TOKEN
+          weight: 100
 
 routing:
   modelCards:
@@ -61,6 +72,14 @@ routing:
         - coding
         - debugging
         - refactoring
+    - name: claude-opus
+      modality: text
+      capabilities:
+        - chat
+        - reasoning
+        - deep_analysis
+        - architecture
+        - complex_problem_solving
 
   signals:
     keywords:
@@ -108,8 +127,42 @@ routing:
           - convert
           - translate
         case_sensitive: false
+      - name: opus_keywords
+        operator: OR
+        keywords:
+          - architect
+          - design pattern
+          - system design
+          - algorithm design
+          - complex
+          - performance optimization
+          - refactor entire
+          - rewrite
+          - root cause analysis
+          - competitive programming
+          - research
+          - whitepaper
+          - mathematical proof
+          - edge case
+          - corner case
+          - thread safety
+          - concurrency
+          - distributed system
+          - microservices architecture
+        case_sensitive: false
 
   decisions:
+    - name: opus-complex-route
+      description: Route very complex architectural/algorithmic tasks to Opus
+      priority: 95
+      rules:
+        operator: OR
+        conditions:
+          - type: keyword
+            name: opus_keywords
+      modelRefs:
+        - model: claude-opus
+          use_reasoning: true
     - name: deep-analysis-route
       description: Route complex reasoning and analysis tasks to Claude
       priority: 90

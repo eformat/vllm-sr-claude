@@ -67,6 +67,24 @@ static_resources:
                       regex: ".*"
                     substitution: "/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6:rawPredict"
 
+              # Route for model: claude-opus
+              - match:
+                  prefix: "/"
+                  headers:
+                  - name: x-selected-model
+                    string_match:
+                      exact: "claude-opus"
+                route:
+                  cluster: claude_opus_cluster
+                  timeout: 300s
+                  idleTimeout: 1200s
+                  host_rewrite_literal: "us-east5-aiplatform.googleapis.com"
+                  regex_rewrite:
+                    pattern:
+                      google_re2: {}
+                      regex: ".*"
+                    substitution: "/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-opus-4-6:rawPredict"
+
               # Default route (no x-selected-model header)
               - match:
                   prefix: "/"
@@ -102,7 +120,7 @@ static_resources:
                 inline_string: |
                   function envoy_on_request(request_handle)
                     local model = request_handle:headers():get("x-selected-model")
-                    if model == "claude-sonnet" then
+                    if model == "claude-sonnet" or model == "claude-opus" then
                       -- Fix body FIRST (before httpCall which may stream it)
                       local body_handle = request_handle:body()
                       if body_handle and body_handle:length() > 0 then
@@ -211,6 +229,32 @@ static_resources:
     lb_policy: ROUND_ROBIN
     load_assignment:
       cluster_name: claude_sonnet_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: us-east5-aiplatform.googleapis.com
+                port_value: 443
+            hostname: "us-east5-aiplatform.googleapis.com"
+          load_balancing_weight: 100
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: us-east5-aiplatform.googleapis.com
+        common_tls_context:
+          tls_params:
+            tls_minimum_protocol_version: TLSv1_2
+            tls_maximum_protocol_version: TLSv1_3
+  # Cluster for model: claude-opus (Vertex AI)
+  - name: claude_opus_cluster
+    connect_timeout: 1200s
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: claude_opus_cluster
       endpoints:
       - lb_endpoints:
         - endpoint:

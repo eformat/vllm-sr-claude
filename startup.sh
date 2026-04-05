@@ -95,6 +95,19 @@ if [ "${1:-}" == "--test" ]; then
         FAIL=$((FAIL + 1))
     fi
 
+    # OpenAI API — architecture request → should route to claude-opus
+    OPUS_RESP=$(curl -s --max-time 90 http://localhost:8899/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -d '{"model":"auto","messages":[{"role":"user","content":"architect a distributed event-driven system design"}],"max_tokens":50}' 2>&1)
+    OPUS_MODEL=$(echo "$OPUS_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('model',''))" 2>/dev/null || true)
+    if [ "$OPUS_MODEL" = "claude-opus" ]; then
+        echo -e "  ${GREEN}✓${NC} Architecture request → claude-opus"
+        PASS=$((PASS + 1))
+    else
+        echo -e "  ${RED}✗${NC} Architecture request → expected claude-opus, got: ${OPUS_MODEL:-no response}"
+        FAIL=$((FAIL + 1))
+    fi
+
     # Anthropic API — proxy translation
     echo -e "\n🌴 ${ORANGE}Anthropic proxy test (:8819)...${NC}"
     ANTHRO_RESP=$(curl -s --max-time 60 http://localhost:8819/v1/messages \

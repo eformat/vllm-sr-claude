@@ -1,13 +1,13 @@
 # vllm-sr with Claude (Vertex AI) + Kimi K2-5
 
-Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted) and Claude Sonnet 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard.
+Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted), Claude Sonnet 4.6, and Claude Opus 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard.
 
-- **Semantic routing** -- requests are automatically routed to the best model based on keywords (coding to Kimi, analysis to Claude - totally configurable using vllm-sr config)
+- **Semantic routing** -- requests are automatically routed to the best model based on keywords (coding to Kimi, analysis to Sonnet, architecture/design to Opus - totally configurable using vllm-sr config)
 - **Claude Code integration** -- use `claude --model=claude-sonnet-4-6` with the Anthropic translation proxy, full streaming support
 - **OpenAI-compatible API** -- any OpenAI client works on port 8899 with `model: "auto"`
 - **Auto-refreshing GCP tokens** -- sidecar mints fresh Vertex AI tokens from ADC, no container restarts needed
 - **Vertex AI body patching** -- Envoy Lua filter injects `anthropic_version`, strips `model`, rewrites auth headers per-request
-- **Cost optimization** -- defaults to Kimi (internal maas hosted) for coding and general tasks, only routes to Claude when deep analysis is needed
+- **Cost optimization** -- defaults to Kimi (internal maas hosted) for coding and general tasks, routes to Sonnet for analysis, Opus only for complex architecture/design
 - **Grafana dashboard** -- real-time metrics: request count, QPS, success rate, latency percentiles, token usage
 - **Zero external dependencies** -- all sidecars are stdlib Python, no pip installs required
 
@@ -22,15 +22,16 @@ Semantic router setup that routes requests between Kimi K2-5 (internal maas host
 Claude Code ──> Anthropic Proxy (:8819) ──> ext_proc (:50051) ──> routing decisions
                 (Anthropic ↔ OpenAI                |
                  format translation)               v
-                                             Lua filter (claude-sonnet only):
+                                             Lua filter (claude models):
                                                1. Patch body for Vertex
                                                2. Fetch GCP token from sidecar
                                                3. Set Authorization header
                                                    |
                                                    v
                                              Upstream:
-                                               kimi-k2-5 --> MaaS
+                                               kimi-k2-5     --> MaaS
                                                claude-sonnet --> Vertex AI
+                                               claude-opus   --> Vertex AI
 
 Prometheus (:9090) ──> scrapes router metrics (:9190)
 Grafana (:3000) ──> visualizes via Prometheus
@@ -106,10 +107,15 @@ curl -s http://localhost:8899/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"auto","messages":[{"role":"user","content":"implement a fibonacci function in python"}],"max_tokens":100}'
 
-# Analysis tasks --> Claude
+# Analysis tasks --> Claude Sonnet
 curl -s http://localhost:8899/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"auto","messages":[{"role":"user","content":"analyze the pros and cons of microservices vs monoliths"}],"max_tokens":100}'
+
+# Architecture/design tasks --> Claude Opus
+curl -s http://localhost:8899/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","messages":[{"role":"user","content":"architect a distributed event-driven system design for a trading platform"}],"max_tokens":100}'
 
 # General chat --> Kimi (default)
 curl -s http://localhost:8899/v1/chat/completions \
@@ -123,6 +129,7 @@ Check which model handled it with `| jq .model`.
 
 | Priority | Signal | Keywords | Routes to |
 |----------|--------|----------|-----------|
+| 100 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus |
 | 90 | deep_analysis_keywords | analyze, explain why, compare, evaluate, critique, pros and cons, trade-offs, implications, nuance... | claude-sonnet |
 | 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 |
 | 1 | (default) | everything else | kimi-k2-5 |

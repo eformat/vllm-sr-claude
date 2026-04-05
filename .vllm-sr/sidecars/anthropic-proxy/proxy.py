@@ -32,7 +32,7 @@ def load_config():
         # Fallback to defaults
         config = {
             "models": {
-                "known_models": ["auto", "kimi-k2-5", "claude-sonnet"]
+                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus"]
             },
             "timeouts": {"http_request": 300},
             "network": {"ports": {"anthropic_proxy": 8819}},
@@ -59,7 +59,7 @@ UPSTREAM_HOST = os.getenv("UPSTREAM_HOST", "vllm-sr-envoy")
 UPSTREAM_PORT = int(os.getenv("UPSTREAM_PORT", "8899"))
 
 # Models known to vllm-sr — pass these through as-is.
-KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-5", "claude-sonnet"]))
+KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus"]))
 
 # Request size limits
 MAX_BODY_SIZE = 10 * 1024 * 1024  # 10MB
