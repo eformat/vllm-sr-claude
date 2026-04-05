@@ -1,0 +1,66 @@
+--- a/cli/core.py
++++ b/cli/core.py
+@@ -3,6 +3,11 @@
+ import time
+ import sys
+ import os
++import tempfile
++import yaml
++from cli.parser import parse_user_config
++from cli.defaults import load_defaults
++from cli.merger import merge_configs
+ from cli.utils import getLogger, load_config, wait_for_healthy, get_envoy_port
+ from cli.consts import (
+     VLLM_SR_DOCKER_NAME,
+@@ -88,10 +93,13 @@
+         log.error(f"Failed to create shared OpenClaw network: {stderr}")
+         sys.exit(1)
+
++    # Always attach the router to the shared bridge network so that
++    # docker_network_connect does not fail on pasta-networked containers.
++    network_name = shared_network_name
++
+     # Start observability stack if enabled
+     if enable_observability:
+         log.info("Starting observability stack (Jaeger + Prometheus + Grafana)...")
+-        network_name = shared_network_name
+
+         # Start Jaeger
+         return_code, stdout, stderr = docker_start_jaeger(network_name)
+@@ -128,6 +136,11 @@
+     dashboard_disabled = env_vars.get("DISABLE_DASHBOARD") == "true"
+     setup_mode = str(env_vars.get("VLLM_SR_SETUP_MODE", "")).lower() == "true"
+
++    # Pass the user config directly to the Go router, which understands
++    # canonical v0.3 format (backend_refs, providers, decisions, etc.).
++    # The Python CLI merger produces a flattened format that the Go router
++    # does not recognize.
++
+     # Start vllm-sr container
+     return_code, stdout, stderr = docker_start_vllm_sr(
+         config_file,
+--- a/cli/docker_start.py
++++ b/cli/docker_start.py
+@@ -163,10 +163,8 @@
+
+
+ def _append_listener_and_service_ports(cmd, listeners, minimal):
+-    for listener in listeners:
+-        port = listener.get("port")
+-        if port:
+-            cmd.extend(["-p", f"{port}:{port}"])
++    # Listener ports (e.g. 8899) are served by Envoy, not the router.
++    # Do not map them here; the Envoy sidecar will bind them.
+
+     cmd.extend(["-p", "50051:50051"])
+     cmd.extend(["-p", "9190:9190"])
+--- a/cli/commands/runtime_support.py
++++ b/cli/commands/runtime_support.py
+@@ -24,6 +24,7 @@
+ PASSTHROUGH_ENV_RULES = (
+     ("HF_ENDPOINT", False),
+     ("HF_TOKEN", True),
++    ("TOKEN", True),
+     ("HF_HOME", False),
+     ("HF_HUB_CACHE", False),
+     ("ANTHROPIC_API_KEY", True),

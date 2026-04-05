@@ -1,0 +1,16 @@
+# Model weights
+models/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+*.env
+
+# Podman/Docker
+*.log
+
+# Claude Code settings
+.claude/

@@ -1,0 +1,93 @@
+# vLLM Semantic Router Configuration
+# Centralized configuration for all services
+#
+# Required environment variables:
+#   GCP_PROJECT_ID     - GCP project for Vertex AI (e.g., "my-project-123")
+#   KIMI_HOST          - Kimi MaaS hostname (e.g., "maas.example.com")
+#   TOKEN              - Kimi MaaS API token
+#   GCP_ACCESS_TOKEN   - GCP access token for Vertex AI (auto-fetched by gcp-token-server)
+
+# GCP Configuration for Vertex AI
+gcp:
+  project_id: "${GCP_PROJECT_ID:-your-gcp-project-id}"
+  location: "${GCP_LOCATION:-us-east5}"
+  # Token refresh before expiry (in seconds)
+  token_refresh_margin: 60
+
+# Upstream endpoints
+endpoints:
+  kimi:
+    host: "${KIMI_HOST:-kimi.example.com}"
+    path: "/kimi-k25/kimi-k2-5/v1"
+    port: 443
+  vertex_ai:
+    host: "us-east5-aiplatform.googleapis.com"
+    # Project ID and location interpolated at runtime
+    path_template: "/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model}:rawPredict"
+    port: 443
+
+# Model configuration
+models:
+  kimi:
+    name: "kimi-k2-5"
+  claude:
+    name: "claude-sonnet-4-6"
+    provider_model_id: "claude-sonnet"
+  # Models known to vllm-sr for proxy passthrough
+  known_models:
+    - "auto"
+    - "kimi-k2-5"
+    - "claude-sonnet"
+
+# Container versions (for documentation and potential version management)
+containers:
+  envoy:
+    image: "docker.io/envoyproxy/envoy"
+    version: "v1.32-latest"
+  grafana:
+    image: "docker.io/grafana/grafana"
+    version: "11.5.1"
+  prometheus:
+    image: "docker.io/prom/prometheus"
+    version: "v3.4.1"
+  python:
+    image: "registry.access.redhat.com/ubi9/python-312"
+    version: "latest"
+
+# Network configuration
+network:
+  name: "vllm-sr-network"
+  # Bind addresses - '127.0.0.1' for localhost only, '0.0.0.0' for all interfaces
+  bind_host: "0.0.0.0"
+  internal_bind_host: "0.0.0.0"
+
+# Port configuration
+ports:
+  envoy_public: 8899
+  envoy_admin: 9901
+  anthropic_proxy: 8819
+  gcp_token_server: 8888
+  prometheus: 9090
+  grafana: 3000
+  ext_proc: 50051
+  metrics: 9190
+
+# Timeouts (in seconds)
+timeouts:
+  http_request: 300
+  idle_timeout: 1200
+  upstream_connect: 1200
+  token_fetch: 10
+  gcp_token_http_call: 5
+
+# Retry configuration
+retries:
+  gcp_token:
+    max_attempts: 3
+    backoff_base: 1.0
+    backoff_max: 10.0
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

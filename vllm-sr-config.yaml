@@ -1,0 +1,158 @@
+version: v0.3
+
+# Environment variables required:
+#   GCP_PROJECT_ID  - GCP project for Vertex AI
+#   KIMI_HOST       - Kimi MaaS hostname
+#   TOKEN           - Kimi MaaS API token
+
+listeners:
+  - name: http-8899
+    address: 0.0.0.0
+    port: 8899
+    timeout: 300s
+
+providers:
+  defaults:
+    default_model: kimi-k2-5
+    default_reasoning_effort: high
+    reasoning_families:
+      gpt:
+        type: reasoning_effort
+        parameter: reasoning.effort
+  models:
+    - name: kimi-k2-5
+      provider_model_id: kimi-k2-5
+      api_format: openai
+      backend_refs:
+        - name: remote-primary
+          base_url: https://${KIMI_HOST}/kimi-k25/kimi-k2-5/v1
+          provider: openai
+          auth_header: Authorization
+          auth_prefix: Bearer
+          api_key_env: TOKEN
+          weight: 100
+    - name: claude-sonnet
+      provider_model_id: claude-sonnet-4-6
+      api_format: anthropic
+      backend_refs:
+        - name: vertex-primary
+          base_url: https://us-east5-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6/v1
+          provider: openai
+          auth_header: Authorization
+          auth_prefix: Bearer
+          api_key_env: GCP_ACCESS_TOKEN
+          weight: 100
+
+routing:
+  modelCards:
+    - name: kimi-k2-5
+      modality: text
+      capabilities:
+        - chat
+        - reasoning
+        - coding
+        - debugging
+        - refactoring
+    - name: claude-sonnet
+      modality: text
+      capabilities:
+        - chat
+        - reasoning
+        - coding
+        - debugging
+        - refactoring
+
+  signals:
+    keywords:
+      - name: deep_analysis_keywords
+        operator: OR
+        keywords:
+          - analyze
+          - analyse
+          - explain why
+          - compare
+          - evaluate
+          - critique
+          - summarize this paper
+          - summarise
+          - write an essay
+          - pros and cons
+          - trade-offs
+          - tradeoffs
+          - implications
+          - nuance
+          - ethical
+          - philosophy
+        case_sensitive: false
+
+      - name: coding_keywords
+        operator: OR
+        keywords:
+          - implement
+          - refactor
+          - debug
+          - function
+          - class
+          - import
+          - build
+          - code
+          - fix
+          - bug
+          - error
+          - compile
+          - test
+          - deploy
+          - script
+          - regex
+          - parse
+          - convert
+          - translate
+        case_sensitive: false
+
+  decisions:
+    - name: deep-analysis-route
+      description: Route complex reasoning and analysis tasks to Claude
+      priority: 90
+      rules:
+        operator: OR
+        conditions:
+          - type: keyword
+            name: deep_analysis_keywords
+      modelRefs:
+        - model: claude-sonnet
+          use_reasoning: false
+
+    - name: coding-route
+      description: Route coding tasks to Kimi (internal, cheaper)
+      priority: 80
+      rules:
+        operator: OR
+        conditions:
+          - type: keyword
+            name: coding_keywords
+      modelRefs:
+        - model: kimi-k2-5
+          use_reasoning: false
+
+    - name: default-route
+      description: Default route to Kimi for cost savings
+      priority: 1
+      rules:
+        operator: AND
+        conditions: []
+      modelRefs:
+        - model: kimi-k2-5
+          use_reasoning: false
+
+global:
+  router:
+    config_source: file
+  stores:
+    semantic_cache:
+      enabled: false
+  services:
+    observability:
+      metrics:
+        enabled: true
+    router_replay:
+      enabled: false
