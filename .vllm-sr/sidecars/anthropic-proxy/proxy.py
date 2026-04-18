@@ -586,11 +586,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 return
 
         if upstream_resp.status != 200:
+            error_body = upstream_resp.read().decode("utf-8", errors="replace")
+            body = json.dumps({"error": {"type": "proxy_error", "message": f"Upstream error: {error_body}"}})
             self.send_response(upstream_resp.status)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            error_body = upstream_resp.read().decode("utf-8", errors="replace")
-            self._send_json_error(upstream_resp.status, f"Upstream error: {error_body}")
+            self.wfile.write(body.encode())
             conn.close()
             return
 
