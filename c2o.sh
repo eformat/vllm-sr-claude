@@ -13,10 +13,15 @@ readonly NC='\033[0m'
 
 # Configuration
 NAMESPACE="${NAMESPACE:-c2o-${USER:-$(whoami)}}"
-DEPLOYMENT_NAME="c2o"
-PVC_NAME="c2o-workspace"
+INSTANCE="${INSTANCE:-}"
+SUFFIX="${INSTANCE:+-${INSTANCE}}"
+DEPLOYMENT_NAME="c2o${SUFFIX}"
+PVC_NAME="c2o-workspace${SUFFIX}"
 SECRET_NAME="c2o-env"
 IMAGE="quay.io/eformat/c2o:latest"
+
+# Instance label value: use INSTANCE if set, otherwise "default"
+INSTANCE_LABEL="${INSTANCE:-default}"
 
 show_help() {
     cat <<EOF
@@ -27,6 +32,7 @@ Usage: c2o <command>
 Commands:
   up       Create/update c2o deployment in namespace $NAMESPACE
   down     Scale deployment to 0 (preserves PVC)
+  remove   Remove an instance's resources (deployment, PVC, services)
   delete   Remove namespace and all resources
   rsh      Open shell in the c2o pod
   login    Copy local gcloud credentials to the pod
@@ -36,15 +42,22 @@ Commands:
 
 Environment:
   NAMESPACE  Override namespace (default: c2o-\$USER)
+  INSTANCE   Deploy a named instance (default: single unnamed instance)
 
 Examples:
-  c2o up                          # Deploy to c2o-\$USER namespace
-  c2o login                       # Copy gcloud creds (required for Claude models)
-  c2o rsh                         # Shell into pod
-  claude                          # Run Claude Code (after c2o rsh)
+  c2o up                                          # Deploy default instance
+  c2o login                                       # Copy gcloud creds
+  c2o rsh                                         # Shell into pod
+  claude                                          # Run Claude Code (after rsh)
 
-  NAMESPACE=user-mhepburn c2o up  # Deploy to a specific namespace
-  NAMESPACE=user-mhepburn c2o rsh # Shell into pod in that namespace
+  NAMESPACE=user-mhepburn c2o up                  # Deploy to a specific namespace
+  NAMESPACE=user-mhepburn c2o rsh                 # Shell into pod in that namespace
+
+  NAMESPACE=user-mhepburn INSTANCE=agent1 c2o up  # Deploy agent1 instance
+  NAMESPACE=user-mhepburn INSTANCE=agent2 c2o up  # Deploy agent2 (same namespace)
+  NAMESPACE=user-mhepburn INSTANCE=agent1 c2o rsh # Shell into agent1
+  NAMESPACE=user-mhepburn INSTANCE=agent1 c2o down   # Scale down agent1 only
+  NAMESPACE=user-mhepburn INSTANCE=agent1 c2o remove # Remove agent1 entirely
 EOF
 }
 
@@ -64,8 +77,24 @@ check_oc() {
     echo -e "${GREEN}✓${NC} Connected to OpenShift: $(oc whoami --show-server)"
 }
 
+# Apply a manifest with sed replacements for instance naming
+apply_instance_manifest() {
+    local file="$1"
+    sed \
+        -e "s/c2o.instance: default/c2o.instance: ${INSTANCE_LABEL}/g" \
+        -e "s/name: c2o-workspace$/name: ${PVC_NAME}/g" \
+        -e "s/claimName: c2o-workspace$/claimName: ${PVC_NAME}/g" \
+        -e "s/name: c2o$/name: ${DEPLOYMENT_NAME}/g" \
+        -e "s/name: c2o-anthropic$/name: c2o-anthropic${SUFFIX}/g" \
+        -e "s/name: c2o-openai$/name: c2o-openai${SUFFIX}/g" \
+        "$file" | oc apply -f - -n "${NAMESPACE}"
+}
+
 cmd_up() {
     echo -e "${BLUE}Deploying c2o to namespace: ${NAMESPACE}${NC}"
+    if [ -n "$INSTANCE" ]; then
+        echo -e "${BLUE}Instance: ${INSTANCE}${NC}"
+    fi
 
     # Check prerequisites
     check_oc
@@ -95,8 +124,8 @@ cmd_up() {
         echo -e "  ${GREEN}✓${NC} Created namespace ${NAMESPACE}"
     fi
 
-    # Apply manifests
-    echo -e "${BLUE}Applying manifests...${NC}"
+    # Apply shared resources (idempotent)
+    echo -e "${BLUE}Applying shared resources...${NC}"
 
     # ConfigMap
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/configmap.yaml" -n "${NAMESPACE}"
@@ -106,21 +135,28 @@ cmd_up() {
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/secret-env.yaml" -n "${NAMESPACE}"
     echo -e "  ${GREEN}✓${NC} Secret"
 
-    # PVC
-    oc apply -f "${SCRIPT_DIR}/openshift/c2o/pvc.yaml" -n "${NAMESPACE}"
-    echo -e "  ${GREEN}✓${NC} PVC"
-
-    # Deployment
-    oc apply -f "${SCRIPT_DIR}/openshift/c2o/deployment.yaml" -n "${NAMESPACE}"
-    echo -e "  ${GREEN}✓${NC} Deployment"
-
-    # Services
+    # Shared services (Grafana, Prometheus, Envoy admin)
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/services.yaml" -n "${NAMESPACE}"
-    echo -e "  ${GREEN}✓${NC} Services"
+    echo -e "  ${GREEN}✓${NC} Shared services"
 
-    # Routes
+    # Routes (shared Grafana/Prometheus)
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/routes.yaml" -n "${NAMESPACE}"
     echo -e "  ${GREEN}✓${NC} Routes"
+
+    # Apply per-instance resources
+    echo -e "${BLUE}Applying instance resources (${INSTANCE_LABEL})...${NC}"
+
+    # PVC (per-instance)
+    apply_instance_manifest "${SCRIPT_DIR}/openshift/c2o/pvc.yaml"
+    echo -e "  ${GREEN}✓${NC} PVC (${PVC_NAME})"
+
+    # Deployment (per-instance)
+    apply_instance_manifest "${SCRIPT_DIR}/openshift/c2o/deployment.yaml"
+    echo -e "  ${GREEN}✓${NC} Deployment (${DEPLOYMENT_NAME})"
+
+    # Per-instance services (anthropic, openai)
+    apply_instance_manifest "${SCRIPT_DIR}/openshift/c2o/services-instance.yaml"
+    echo -e "  ${GREEN}✓${NC} Instance services (c2o-anthropic${SUFFIX}, c2o-openai${SUFFIX})"
 
     echo ""
     echo -e "${BLUE}Waiting for deployment to be ready...${NC}"
@@ -129,17 +165,40 @@ cmd_up() {
     echo ""
     echo -e "${GREEN}🌴 c2o is up and running!${NC}"
     echo ""
-    echo -e "Run '${ORANGE}c2o rsh${NC}' to shell into the pod"
-    echo -e "Run '${ORANGE}c2o login${NC}' to copy gcloud credentials"
+    echo -e "Run '${ORANGE}${INSTANCE:+INSTANCE=${INSTANCE} }c2o rsh${NC}' to shell into the pod"
+    echo -e "Run '${ORANGE}${INSTANCE:+INSTANCE=${INSTANCE} }c2o login${NC}' to copy gcloud credentials"
     echo -e "Run '${ORANGE}c2o urls${NC}' to see dashboard URLs"
 }
 
 cmd_down() {
-    echo -e "${BLUE}Scaling down c2o in namespace: ${NAMESPACE}${NC}"
+    echo -e "${BLUE}Scaling down ${DEPLOYMENT_NAME} in namespace: ${NAMESPACE}${NC}"
     check_oc
 
     oc scale deployment/${DEPLOYMENT_NAME} --replicas=0 -n "${NAMESPACE}" 2>/dev/null || true
-    echo -e "${GREEN}🌴 c2o is scaled down (PVC preserved)${NC}"
+    echo -e "${GREEN}🌴 ${DEPLOYMENT_NAME} is scaled down (PVC preserved)${NC}"
+}
+
+cmd_remove() {
+    echo -e "${BLUE}Removing instance '${INSTANCE_LABEL}' from namespace: ${NAMESPACE}${NC}"
+    check_oc
+
+    echo -e "${ORANGE}This will delete deployment, PVC, and services for instance '${INSTANCE_LABEL}'${NC}"
+    read -p "Are you sure? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled"
+        exit 0
+    fi
+
+    # Delete all resources with the instance label
+    oc delete all -l "c2o.instance=${INSTANCE_LABEL}" -n "${NAMESPACE}" --ignore-not-found=true
+    echo -e "  ${GREEN}✓${NC} Deleted deployment, services, pods"
+
+    # PVCs are not covered by 'all', delete separately
+    oc delete pvc -l "c2o.instance=${INSTANCE_LABEL}" -n "${NAMESPACE}" --ignore-not-found=true
+    echo -e "  ${GREEN}✓${NC} Deleted PVC"
+
+    echo -e "${GREEN}🌴 Instance '${INSTANCE_LABEL}' removed${NC}"
 }
 
 cmd_delete() {
@@ -161,10 +220,10 @@ cmd_rsh() {
     check_oc
 
     local pod
-    pod=$(oc get pods -n "${NAMESPACE}" -l app=c2o -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    pod=$(oc get pods -n "${NAMESPACE}" -l "app=c2o,c2o.instance=${INSTANCE_LABEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$pod" ]; then
-        echo -e "${RED}Error: No c2o pod found in namespace ${NAMESPACE}${NC}"
+        echo -e "${RED}Error: No c2o pod found in namespace ${NAMESPACE} (instance: ${INSTANCE_LABEL})${NC}"
         echo "Run 'c2o up' first"
         exit 1
     fi
@@ -177,7 +236,7 @@ cmd_login() {
     check_oc
 
     local pod
-    pod=$(oc get pods -n "${NAMESPACE}" -l app=c2o -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    pod=$(oc get pods -n "${NAMESPACE}" -l "app=c2o,c2o.instance=${INSTANCE_LABEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$pod" ]; then
         echo -e "${RED}Error: No c2o pod found. Run 'c2o up' first${NC}"
@@ -207,8 +266,13 @@ cmd_login() {
 cmd_status() {
     check_oc
 
+    if [ -n "$INSTANCE" ]; then
+        echo -e "${BLUE}Instance: ${INSTANCE}${NC}"
+        echo ""
+    fi
+
     echo -e "${BLUE}Pod status:${NC}"
-    oc get pods -n "${NAMESPACE}" -l app=c2o 2>/dev/null || echo "  No pods found"
+    oc get pods -n "${NAMESPACE}" -l "app=c2o,c2o.instance=${INSTANCE_LABEL}" 2>/dev/null || echo "  No pods found"
 
     echo ""
     echo -e "${BLUE}Deployment:${NC}"
@@ -262,6 +326,9 @@ case "${1:-help}" in
         ;;
     down)
         cmd_down
+        ;;
+    remove)
+        cmd_remove
         ;;
     delete)
         cmd_delete

@@ -4,15 +4,18 @@ metadata:
   name: c2o
   labels:
     app: c2o
+    c2o.instance: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: c2o
+      c2o.instance: default
   template:
     metadata:
       labels:
         app: c2o
+        c2o.instance: default
     spec:
       containers:
       - name: c2o

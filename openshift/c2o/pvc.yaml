@@ -2,6 +2,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: c2o-workspace
+  labels:
+    app: c2o
+    c2o.instance: default
 spec:
   accessModes:
     - ReadWriteOnce
