@@ -1,0 +1,27 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: c2o-grafana
+spec:
+  to:
+    kind: Service
+    name: c2o-grafana
+  port:
+    targetPort: grafana
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: c2o-prometheus
+spec:
+  to:
+    kind: Service
+    name: c2o-prometheus
+  port:
+    targetPort: prometheus
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

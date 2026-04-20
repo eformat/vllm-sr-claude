@@ -200,6 +200,8 @@ routing:
 global:
   router:
     config_source: file
+  model_catalog:
+    kbs: []
   stores:
     semantic_cache:
       enabled: false

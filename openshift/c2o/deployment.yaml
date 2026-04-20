@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c2o
+  labels:
+    app: c2o
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: c2o
+  template:
+    metadata:
+      labels:
+        app: c2o
+    spec:
+      containers:
+      - name: c2o
+        image: quay.io/eformat/c2o:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8819
+          name: anthropic
+        - containerPort: 8899
+          name: openai
+        - containerPort: 3000
+          name: grafana
+        - containerPort: 9090
+          name: prometheus
+        - containerPort: 9901
+          name: envoy-admin
+        - containerPort: 8888
+          name: gcp-token
+        env:
+        - name: TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: TOKEN
+        - name: KIMI_HOST
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: KIMI_HOST
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: GCP_PROJECT_ID
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: HF_TOKEN
+              optional: true
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: GF_SECURITY_ADMIN_USER
+              optional: true
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: c2o-env
+              key: GF_SECURITY_ADMIN_PASSWORD
+              optional: true
+        - name: ANTHROPIC_BASE_URL
+          value: "http://localhost:8819"
+        - name: ANTHROPIC_API_KEY
+          value: "sk-ant-api03-proxy-placeholder-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        volumeMounts:
+        - name: workspace
+          mountPath: /home/user/workspace
+        - name: claude-config
+          mountPath: /home/user/.claude
+        - name: cache
+          mountPath: /home/user/.cache
+        - name: gcloud
+          mountPath: /home/user/.config/gcloud
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8819
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8819
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8819
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold: 3
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: c2o-workspace
+      - name: claude-config
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      - name: gcloud
+        emptyDir: {}

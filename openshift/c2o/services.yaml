@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: c2o-anthropic
+spec:
+  selector:
+    app: c2o
+  ports:
+  - port: 8819
+    targetPort: 8819
+    name: anthropic
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c2o-openai
+spec:
+  selector:
+    app: c2o
+  ports:
+  - port: 8899
+    targetPort: 8899
+    name: openai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c2o-grafana
+spec:
+  selector:
+    app: c2o
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: grafana
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c2o-prometheus
+spec:
+  selector:
+    app: c2o
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: prometheus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: c2o-envoy-admin
+spec:
+  selector:
+    app: c2o
+  ports:
+  - port: 9901
+    targetPort: 9901
+    name: envoy-admin

@@ -16,3 +16,5 @@ __pycache__/
 .claude/
 
 BLOG.md
+
+openshift/c2o/secret-env.yaml
