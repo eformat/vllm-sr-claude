@@ -18,3 +18,4 @@ __pycache__/
 BLOG.md
 
 openshift/c2o/secret-env.yaml
+.c2o-task-results/

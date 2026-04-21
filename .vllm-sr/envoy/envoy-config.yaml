@@ -43,7 +43,7 @@ static_resources:
                       exact: "kimi-k2-5"
                 route:
                   cluster: kimi_k2_5_cluster
-                  timeout: 300s
+                  timeout: 1200s
                   idleTimeout: 1200s
                   # Rewrite Host header to match upstream server
                   host_rewrite_literal: "${KIMI_HOST}"
@@ -58,7 +58,7 @@ static_resources:
                       exact: "claude-sonnet"
                 route:
                   cluster: claude_sonnet_cluster
-                  timeout: 300s
+                  timeout: 1200s
                   idleTimeout: 1200s
                   host_rewrite_literal: "us-east5-aiplatform.googleapis.com"
                   regex_rewrite:
@@ -76,7 +76,7 @@ static_resources:
                       exact: "claude-opus"
                 route:
                   cluster: claude_opus_cluster
-                  timeout: 300s
+                  timeout: 1200s
                   idleTimeout: 1200s
                   host_rewrite_literal: "us-east5-aiplatform.googleapis.com"
                   regex_rewrite:
@@ -93,7 +93,7 @@ static_resources:
                   # Route to first model by default
                   cluster: kimi_k2_5_cluster
 
-                  timeout: 300s
+                  timeout: 1200s
 
                   # Rewrite Host header to match upstream server
                   host_rewrite_literal: "${KIMI_HOST}"
@@ -112,7 +112,7 @@ static_resources:
                 response_header_mode: "SEND"
                 request_body_mode: "BUFFERED"
                 response_body_mode: "BUFFERED"
-              message_timeout: 300s
+              message_timeout: 1200s
           - name: envoy.filters.http.lua
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua

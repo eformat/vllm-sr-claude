@@ -135,9 +135,13 @@ cmd_up() {
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/secret-env.yaml" -n "${NAMESPACE}"
     echo -e "  ${GREEN}✓${NC} Secret"
 
-    # Shared services (Grafana, Prometheus, Envoy admin)
-    oc apply -f "${SCRIPT_DIR}/openshift/c2o/services.yaml" -n "${NAMESPACE}"
-    echo -e "  ${GREEN}✓${NC} Shared services"
+    # Shared services (Grafana, Prometheus, Envoy admin) — pinned to first instance
+    if ! oc get svc c2o-grafana -n "${NAMESPACE}" &>/dev/null; then
+        apply_instance_manifest "${SCRIPT_DIR}/openshift/c2o/services.yaml"
+        echo -e "  ${GREEN}✓${NC} Shared services (pinned to ${INSTANCE_LABEL})"
+    else
+        echo -e "  ${GREEN}✓${NC} Shared services (already exist, keeping current target)"
+    fi
 
     # Routes (shared Grafana/Prometheus)
     oc apply -f "${SCRIPT_DIR}/openshift/c2o/routes.yaml" -n "${NAMESPACE}"
@@ -162,11 +166,41 @@ cmd_up() {
     echo -e "${BLUE}Waiting for deployment to be ready...${NC}"
     oc rollout status deployment/${DEPLOYMENT_NAME} -n "${NAMESPACE}" --timeout=300s
 
+    # Copy gcloud credentials if available
+    local adc_path="${HOME}/.config/gcloud/application_default_credentials.json"
+    if [ -f "$adc_path" ]; then
+        local new_pod
+        new_pod=$(oc get pods -n "${NAMESPACE}" -l "app=c2o,c2o.instance=${INSTANCE_LABEL}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [ -n "$new_pod" ]; then
+            oc cp -n "${NAMESPACE}" "$adc_path" "${new_pod}:/home/user/.config/gcloud/application_default_credentials.json" 2>/dev/null
+            # Also start token server if it was skipped at boot
+            oc exec -n "${NAMESPACE}" "${new_pod}" -- python3 -c "
+import subprocess, os, time
+adc = '/home/user/.config/gcloud/application_default_credentials.json'
+if os.path.exists(adc):
+    with open('/app/sidecars/gcp-token-server.py') as f:
+        code = f.read().replace('/adc/application_default_credentials.json', adc)
+    with open('/tmp/gcp-token-server-patched.py', 'w') as f:
+        f.write(code)
+    subprocess.Popen(['python3', '/tmp/gcp-token-server-patched.py'],
+        stdout=open('/tmp/c2o-logs/gcp-token-server.log','w'), stderr=subprocess.STDOUT)
+    time.sleep(3)
+    import urllib.request
+    r = urllib.request.urlopen('http://localhost:8888/token')
+    token = r.read().decode()
+    assert token.startswith('ya29.'), f'Bad token: {token[:20]}'
+    print('ok')
+" 2>/dev/null && echo -e "  ${GREEN}✓${NC} GCP credentials + token server verified (ya29.*)" \
+              || echo -e "  ${ORANGE}!${NC} GCP credentials copied but token server failed — check logs"
+        fi
+    else
+        echo -e "  ${ORANGE}!${NC} No GCP credentials found — run 'gcloud auth application-default login' then 'c2o login'"
+    fi
+
     echo ""
     echo -e "${GREEN}🌴 c2o is up and running!${NC}"
     echo ""
     echo -e "Run '${ORANGE}${INSTANCE:+INSTANCE=${INSTANCE} }c2o rsh${NC}' to shell into the pod"
-    echo -e "Run '${ORANGE}${INSTANCE:+INSTANCE=${INSTANCE} }c2o login${NC}' to copy gcloud credentials"
     echo -e "Run '${ORANGE}c2o urls${NC}' to see dashboard URLs"
 }
 
@@ -254,13 +288,8 @@ cmd_login() {
     oc cp -n "${NAMESPACE}" "$adc_path" "${pod}:/home/user/.config/gcloud/application_default_credentials.json"
     echo -e "  ${GREEN}✓${NC} Copied credentials"
 
-    # Restart the pod to pick up credentials
-    echo -e "${BLUE}Restarting pod to activate credentials...${NC}"
-    oc delete pod -n "${NAMESPACE}" "$pod"
-    sleep 2
-    oc rollout status deployment/${DEPLOYMENT_NAME} -n "${NAMESPACE}" --timeout=120s
-
-    echo -e "${GREEN}🌴 Credentials synced and pod restarted${NC}"
+    echo -e "${GREEN}🌴 Credentials synced${NC}"
+    echo -e "${ORANGE}Note: restart the pod if gcp-token-server was skipped at boot${NC}"
 }
 
 cmd_status() {

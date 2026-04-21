@@ -13,6 +13,7 @@ import os
 import http.client
 import socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 # Load configuration
@@ -34,7 +35,7 @@ def load_config():
             "models": {
                 "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus"]
             },
-            "timeouts": {"http_request": 300},
+            "timeouts": {"http_request": 1200},
             "network": {"ports": {"anthropic_proxy": 8819}},
             "logging": {"level": "INFO"},
         }
@@ -578,8 +579,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         if upstream_resp.status != 200 and openai_req.get("stream"):
             # Streaming rejected — retry without streaming
+            reject_body = upstream_resp.read().decode("utf-8", errors="replace")
             conn.close()
-            log.info("Streaming rejected by upstream, retrying without streaming")
+            log.info(f"Streaming rejected by upstream (status={upstream_resp.status}): {reject_body[:200]}")
+            log.info("Retrying without streaming")
             openai_req["stream"] = False
             upstream_resp, conn = self._upstream_request(openai_req)
             if upstream_resp is None:
@@ -587,6 +590,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         if upstream_resp.status != 200:
             error_body = upstream_resp.read().decode("utf-8", errors="replace")
+            log.warning(f"Upstream error (status={upstream_resp.status}): {error_body[:500]}")
             body = json.dumps({"error": {"type": "proxy_error", "message": f"Upstream error: {error_body}"}})
             self.send_response(upstream_resp.status)
             self.send_header("Content-Type", "application/json")
@@ -655,8 +659,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def _upstream_request(self, openai_req):
         """Send request to upstream, return (response, connection) or (None, None) on error."""
-        conn_timeout = config.get("timeouts", {}).get("upstream_connect", 30)
-        read_timeout = config.get("timeouts", {}).get("http_request", 300)
+        conn_timeout = config.get("timeouts", {}).get("upstream_connect", 10)
+        read_timeout = config.get("timeouts", {}).get("http_request", 600)
         body = json.dumps(openai_req).encode()
         try:
             conn = http.client.HTTPConnection(UPSTREAM_HOST, UPSTREAM_PORT, timeout=conn_timeout)
@@ -664,10 +668,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 "POST", "/v1/chat/completions", body=body,
                 headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
             )
-            resp = conn.getresponse()
-            # Set socket-level read timeout to prevent hangs on long streaming responses
+            # Switch to read timeout before waiting for response (LLM calls can take minutes)
             if conn.sock:
                 conn.sock.settimeout(read_timeout)
+            resp = conn.getresponse()
             return resp, conn
         except socket.timeout:
             self._send_json_error(504, "Upstream connection timeout")
@@ -706,11 +710,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
         log.info(f"{self.address_string()} - {fmt % args}")
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", config.get("network", {}).get("ports", {}).get("anthropic_proxy", 8819)))
     host = config.get("network", {}).get("internal_bind_host", "0.0.0.0")
 
-    server = HTTPServer((host, port), ProxyHandler)
+    server = ThreadedHTTPServer((host, port), ProxyHandler)
     log.info(f"Anthropic-to-OpenAI proxy listening on {host}:{port}")
     log.info(f"Upstream: {UPSTREAM_HOST}:{UPSTREAM_PORT}")
     log.info(f"Known models: {KNOWN_MODELS}")

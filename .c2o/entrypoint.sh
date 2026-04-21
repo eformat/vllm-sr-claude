@@ -50,13 +50,13 @@ process_configs() {
             cat "$log_dir/envoy-config.processed.yaml" 2>/dev/null || true
         }
         # Replace Docker network hostnames with localhost for single-container mode
-        sed -i 's/vllm-sr-container/localhost/g; s/gcp-token-server/localhost/g' \
+        sed -i 's/vllm-sr-container/127.0.0.1/g; s/gcp-token-server/127.0.0.1/g' \
             "$log_dir/envoy-config.processed.yaml"
     else
         warn "envsubst not found, using raw configs"
         cp "$CONFIG_DIR/vllm-sr-config.yaml" "$log_dir/vllm-sr-config.processed.yaml"
         cp "$CONFIG_DIR/envoy-config.yaml" "$log_dir/envoy-config.processed.yaml"
-        sed -i 's/vllm-sr-container/localhost/g; s/gcp-token-server/localhost/g' \
+        sed -i 's/vllm-sr-container/127.0.0.1/g; s/gcp-token-server/127.0.0.1/g' \
             "$log_dir/envoy-config.processed.yaml"
     fi
 

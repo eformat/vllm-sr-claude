@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "c2o-agents": {
+      "command": "python3",
+      "args": ["hack/c2o-mcp-server.py"],
+      "env": {
+        "C2O_NAMESPACE": "user-mhepburn"
+      }
+    }
+  }
+}

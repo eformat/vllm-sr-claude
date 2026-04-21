@@ -68,6 +68,8 @@ spec:
               name: c2o-env
               key: GF_SECURITY_ADMIN_PASSWORD
               optional: true
+        - name: UPSTREAM_HOST
+          value: "localhost"
         - name: ANTHROPIC_BASE_URL
           value: "http://localhost:8819"
         - name: ANTHROPIC_API_KEY
@@ -75,18 +77,21 @@ spec:
         volumeMounts:
         - name: workspace
           mountPath: /home/user/workspace
-        - name: claude-config
+        - name: workspace
           mountPath: /home/user/.claude
-        - name: cache
+          subPath: .claude
+        - name: workspace
           mountPath: /home/user/.cache
-        - name: gcloud
+          subPath: .cache
+        - name: workspace
           mountPath: /home/user/.config/gcloud
+          subPath: .gcloud
         resources:
           requests:
             memory: "2Gi"
             cpu: "500m"
           limits:
-            memory: "8Gi"
+            memory: "12Gi"
             cpu: "4000m"
         startupProbe:
           httpGet:
@@ -101,21 +106,17 @@ spec:
             port: 8819
           initialDelaySeconds: 5
           periodSeconds: 10
-          failureThreshold: 3
+          timeoutSeconds: 5
+          failureThreshold: 6
         livenessProbe:
           httpGet:
             path: /health
             port: 8819
           initialDelaySeconds: 30
           periodSeconds: 30
-          failureThreshold: 3
+          timeoutSeconds: 5
+          failureThreshold: 5
       volumes:
       - name: workspace
         persistentVolumeClaim:
           claimName: c2o-workspace
-      - name: claude-config
-        emptyDir: {}
-      - name: cache
-        emptyDir: {}
-      - name: gcloud
-        emptyDir: {}

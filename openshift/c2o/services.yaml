@@ -5,6 +5,7 @@ metadata:
 spec:
   selector:
     app: c2o
+    c2o.instance: default
   ports:
   - port: 3000
     targetPort: 3000
@@ -17,6 +18,7 @@ metadata:
 spec:
   selector:
     app: c2o
+    c2o.instance: default
   ports:
   - port: 9090
     targetPort: 9090
@@ -29,6 +31,7 @@ metadata:
 spec:
   selector:
     app: c2o
+    c2o.instance: default
   ports:
   - port: 9901
     targetPort: 9901
