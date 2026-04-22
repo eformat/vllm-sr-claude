@@ -55,6 +55,17 @@ data:
               auth_prefix: Bearer
               api_key_env: GCP_ACCESS_TOKEN
               weight: 100
+        - name: claude-opus-4-7
+          provider_model_id: claude-opus-4-7
+          api_format: anthropic
+          backend_refs:
+            - name: vertex-opus-4-7
+              base_url: https://us-east5-aiplatform.googleapis.com/v1/projects/$(GCP_PROJECT_ID)/locations/us-east5/publishers/anthropic/models/claude-opus-4-7/v1
+              provider: openai
+              auth_header: Authorization
+              auth_prefix: Bearer
+              api_key_env: GCP_ACCESS_TOKEN
+              weight: 100
 
     routing:
       modelCards:
@@ -75,6 +86,14 @@ data:
             - debugging
             - refactoring
         - name: claude-opus
+          modality: text
+          capabilities:
+            - chat
+            - reasoning
+            - deep_analysis
+            - architecture
+            - complex_problem_solving
+        - name: claude-opus-4-7
           modality: text
           capabilities:
             - chat
@@ -282,6 +301,22 @@ data:
                         substitution: "/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-opus-4-6:rawPredict"
                   - match:
                       prefix: "/"
+                      headers:
+                      - name: x-selected-model
+                        string_match:
+                          exact: "claude-opus-4-7"
+                    route:
+                      cluster: claude_opus_4_7_cluster
+                      timeout: 300s
+                      idleTimeout: 1200s
+                      host_rewrite_literal: "us-east5-aiplatform.googleapis.com"
+                      regex_rewrite:
+                        pattern:
+                          google_re2: {}
+                          regex: ".*"
+                        substitution: "/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-opus-4-7:rawPredict"
+                  - match:
+                      prefix: "/"
                     route:
                       cluster: kimi_k2_5_cluster
                       timeout: 300s
@@ -308,7 +343,7 @@ data:
                     inline_string: |
                       function envoy_on_request(request_handle)
                         local model = request_handle:headers():get("x-selected-model")
-                        if model == "claude-sonnet" or model == "claude-opus" then
+                        if model == "claude-sonnet" or model == "claude-opus" or model == "claude-opus-4-7" then
                           local body_handle = request_handle:body()
                           if body_handle and body_handle:length() > 0 then
                             local raw = body_handle:getBytes(0, body_handle:length())
@@ -418,6 +453,31 @@ data:
         lb_policy: ROUND_ROBIN
         load_assignment:
           cluster_name: claude_opus_cluster
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: us-east5-aiplatform.googleapis.com
+                    port_value: 443
+              hostname: "us-east5-aiplatform.googleapis.com"
+              load_balancing_weight: 100
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: us-east5-aiplatform.googleapis.com
+            common_tls_context:
+              tls_params:
+                tls_minimum_protocol_version: TLSv1_2
+                tls_maximum_protocol_version: TLSv1_3
+      - name: claude_opus_4_7_cluster
+        connect_timeout: 1200s
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: claude_opus_4_7_cluster
           endpoints:
           - lb_endpoints:
             - endpoint:

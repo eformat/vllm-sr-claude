@@ -8,7 +8,7 @@ A novel approach to saving tokens using vllm semantic router.
 4. Per-route reasoning control with Anthropic extended thinking
 5. Full observability stack (Prometheus + Grafana)
 
-Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted), Claude Sonnet 4.6, and Claude Opus 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard.
+Semantic router setup that routes requests between Kimi K2-5 (internal maas hosted), Claude Sonnet 4.6, and Claude Opus 4.6 (via Google Vertex AI), with auto-refreshing GCP tokens and a Grafana dashboard. Claude Opus 4.7 is pre-configured and ready to activate when available on Vertex AI.
 
 - **Semantic routing** -- requests are automatically routed to the best model based on keywords (coding to Kimi, analysis to Sonnet, architecture/design to Opus - totally configurable using vllm-sr config)
 - **Claude Code integration** -- use `claude --model=claude-sonnet-4-6` with the Anthropic translation proxy, full streaming support
@@ -62,7 +62,8 @@ Claude Code ──> Anthropic Proxy (:8819) ──> ext_proc (:50051) ──> ro
                                              Upstream:
                                                kimi-k2-5     --> MaaS
                                                claude-sonnet --> Vertex AI
-                                               claude-opus   --> Vertex AI
+                                               claude-opus     --> Vertex AI (4.6)
+                                               claude-opus-4-7 --> Vertex AI (4.7, when available)
 
 Prometheus (:9090) ──> scrapes router metrics (:9190)
 Grafana (:3000) ──> visualizes via Prometheus

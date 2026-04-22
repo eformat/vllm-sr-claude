@@ -133,13 +133,30 @@ async def send_task_local(pod: str, prompt: str, model: str, working_dir: str | 
 
     Uses python3 as intermediary to avoid bash interpreting special chars
     (backticks, $, quotes) in the prompt text.
+
+    Uses --output-format json to get structured output with real tool
+    execution results (avoids hallucinated tool responses that occur with
+    --output-format text).
     """
-    parts = ["import sys,subprocess as sp"]
+    parts = ["import sys,subprocess as sp,json"]
     if working_dir:
-        parts[0] = "import sys,os,subprocess as sp"
+        parts[0] = "import sys,os,subprocess as sp,json"
         parts.append(f"os.chdir({working_dir!r})")
     parts.append(
-        f'r=sp.run(["claude","-p",sys.stdin.read(),"--model","{model}","--output-format","text","--permission-mode","bypassPermissions"])'
+        f'r=sp.run(["claude","-p",sys.stdin.read(),'
+        f'"--model","{model}",'
+        f'"--output-format","json",'
+        f'"--permission-mode","bypassPermissions",'
+        f'"--verbose"],'
+        f'capture_output=True,text=True)'
+    )
+    # Parse JSON array output to extract the final result text.
+    # --output-format json returns [{type:"system",...}, {type:"assistant",...}, ..., {type:"result", result:"..."}]
+    # We want just the "result" string from the last entry with type=="result".
+    parts.append(
+        'j=json.loads(r.stdout) if r.stdout.strip() else [];'
+        'res=[e.get("result","") for e in j if isinstance(e,dict) and e.get("type")=="result"];'
+        'print(res[-1] if res else r.stdout)'
     )
     parts.append("sys.exit(r.returncode)")
     py_code = ";".join(parts)

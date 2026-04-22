@@ -39,6 +39,7 @@ models:
     - "kimi-k2-5"
     - "claude-sonnet"
     - "claude-opus"
+    - "claude-opus-4-7"
 
 # Container versions (for documentation and potential version management)
 containers:

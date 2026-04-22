@@ -4,9 +4,8 @@
       "command": "python3",
       "args": ["hack/c2o-mcp-server.py"],
       "env": {
-        "C2O_NAMESPACE": "c2o-agents"
+        "C2O_NAMESPACE": "user-mhepburn"
       }
     }
   }
 }
-

@@ -4,6 +4,10 @@ Accepts Anthropic Messages API requests on /v1/messages,
 translates to OpenAI Chat Completions format, forwards to
 vllm-sr (Envoy), and translates streaming responses back.
 
+For Claude models on Vertex AI, requests are forwarded directly
+in native Anthropic format (no format conversion) to preserve
+tool definitions and avoid the double-translation problem.
+
 Runs as a sidecar container on vllm-sr-network.
 """
 
@@ -12,6 +16,7 @@ import logging
 import os
 import http.client
 import socket
+import ssl
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pathlib import Path
@@ -33,7 +38,7 @@ def load_config():
         # Fallback to defaults
         config = {
             "models": {
-                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus"]
+                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7"]
             },
             "timeouts": {"http_request": 1200},
             "network": {"ports": {"anthropic_proxy": 8819}},
@@ -64,6 +69,50 @@ KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k
 
 # Request size limits
 MAX_BODY_SIZE = 10 * 1024 * 1024  # 10MB
+
+# --- Vertex AI direct path for Claude models ---
+# When a Claude model is explicitly requested, bypass the OpenAI format
+# conversion and forward directly to Vertex AI in native Anthropic format.
+# This avoids the double-translation (Anthropic→OpenAI→Anthropic) that
+# causes tool definitions to be sent in the wrong format.
+VERTEX_HOST = os.getenv("VERTEX_HOST", "us-east5-aiplatform.googleapis.com")
+VERTEX_REGION = os.getenv("VERTEX_REGION", "us-east5")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
+GCP_TOKEN_HOST = os.getenv("GCP_TOKEN_HOST", "localhost")
+GCP_TOKEN_PORT = int(os.getenv("GCP_TOKEN_PORT", "8888"))
+
+# Short name → full Anthropic model ID for Vertex AI URL
+CLAUDE_MODEL_MAP = {
+    "claude-sonnet": "claude-sonnet-4-6",
+    "claude-opus": "claude-opus-4-6",
+    "claude-opus-4-7": "claude-opus-4-7",
+}
+
+
+def is_claude_model(model: str) -> bool:
+    """Check if the model should be routed directly to Vertex AI."""
+    return model.startswith("claude") and bool(GCP_PROJECT_ID)
+
+
+def get_vertex_model_id(model: str) -> str:
+    """Map model name to full Vertex AI model ID."""
+    return CLAUDE_MODEL_MAP.get(model, model)
+
+
+def get_gcp_token() -> str:
+    """Fetch a fresh GCP access token from the token server sidecar."""
+    try:
+        conn = http.client.HTTPConnection(GCP_TOKEN_HOST, GCP_TOKEN_PORT, timeout=5)
+        conn.request("GET", "/token")
+        resp = conn.getresponse()
+        token = resp.read().decode().strip()
+        conn.close()
+        if resp.status == 200 and token:
+            return token
+        log.warning(f"GCP token server returned status {resp.status}")
+    except Exception as e:
+        log.error(f"Failed to get GCP token: {e}")
+    return ""
 
 
 class ProxyError(Exception):
@@ -565,7 +614,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         client_wants_stream = anthropic_req.get("stream", False)
+        model = anthropic_req.get("model", "auto")
 
+        # Direct path for Claude models → Vertex AI (native Anthropic format)
+        if is_claude_model(model):
+            self._handle_claude_direct(anthropic_req, model, client_wants_stream)
+            return
+
+        # Standard path: convert to OpenAI → semantic router → Envoy
         try:
             openai_req = translate_request(anthropic_req)
         except ProxyError as e:
@@ -654,6 +710,95 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(out)))
             self.end_headers()
             self.wfile.write(out)
+
+        conn.close()
+
+    def _handle_claude_direct(self, req, model, stream):
+        """Forward request directly to Vertex AI in native Anthropic format.
+
+        Bypasses the OpenAI format conversion entirely, preserving tool
+        definitions in the format that Vertex AI Claude models understand.
+        """
+        model_id = get_vertex_model_id(model)
+        path = (
+            f"/v1/projects/{GCP_PROJECT_ID}/locations/{VERTEX_REGION}"
+            f"/publishers/anthropic/models/{model_id}:rawPredict"
+        )
+
+        token = get_gcp_token()
+        if not token:
+            self._send_json_error(502, "Failed to obtain GCP access token")
+            return
+
+        # Prepare body: keep Anthropic format, add vertex version, strip unsupported fields
+        body = dict(req)
+        body.pop("model", None)
+        body["anthropic_version"] = "vertex-2023-10-16"
+        # Strip fields that Vertex AI rawPredict does not support
+        for key in ("context_management",):
+            body.pop(key, None)
+        payload = json.dumps(body).encode()
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Length": str(len(payload)),
+        }
+
+        read_timeout = config.get("timeouts", {}).get("http_request", 600)
+        log.info(f"Claude direct → Vertex AI: model={model_id} stream={stream} tools={len(req.get('tools', []))}")
+
+        try:
+            ctx = ssl.create_default_context()
+            conn = http.client.HTTPSConnection(VERTEX_HOST, 443, timeout=10, context=ctx)
+            conn.request("POST", path, body=payload, headers=headers)
+            if conn.sock:
+                conn.sock.settimeout(read_timeout)
+            resp = conn.getresponse()
+        except socket.timeout:
+            self._send_json_error(504, "Vertex AI connection timeout")
+            return
+        except Exception as e:
+            log.exception("Vertex AI connection error")
+            self._send_json_error(502, f"Vertex AI connection error: {e}")
+            return
+
+        if resp.status != 200:
+            error_body = resp.read().decode("utf-8", errors="replace")
+            log.warning(f"Vertex AI error (status={resp.status}): {error_body[:500]}")
+            body = json.dumps({"error": {"type": "vertex_error", "message": error_body[:500]}})
+            self.send_response(resp.status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body.encode())
+            conn.close()
+            return
+
+        if stream:
+            # Pass through Anthropic SSE from Vertex AI as-is
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            try:
+                while True:
+                    chunk = resp.read(4096)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+        else:
+            # Pass through Anthropic JSON response as-is
+            response_body = resp.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
 
         conn.close()
 

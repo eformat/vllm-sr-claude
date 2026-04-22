@@ -53,6 +53,17 @@ providers:
           auth_prefix: Bearer
           api_key_env: GCP_ACCESS_TOKEN
           weight: 100
+    - name: claude-opus-4-7
+      provider_model_id: claude-opus-4-7
+      api_format: anthropic
+      backend_refs:
+        - name: vertex-opus-4-7
+          base_url: https://us-east5-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/us-east5/publishers/anthropic/models/claude-opus-4-7/v1
+          provider: openai
+          auth_header: Authorization
+          auth_prefix: Bearer
+          api_key_env: GCP_ACCESS_TOKEN
+          weight: 100
 
 routing:
   modelCards:
@@ -73,6 +84,14 @@ routing:
         - debugging
         - refactoring
     - name: claude-opus
+      modality: text
+      capabilities:
+        - chat
+        - reasoning
+        - deep_analysis
+        - architecture
+        - complex_problem_solving
+    - name: claude-opus-4-7
       modality: text
       capabilities:
         - chat
