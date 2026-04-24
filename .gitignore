@@ -19,3 +19,5 @@ BLOG.md
 
 openshift/c2o/secret-env.yaml
 .c2o-task-results/
+
+hack/router

@@ -43,10 +43,10 @@ RUN curl -fsSL https://github.com/prometheus/prometheus/releases/download/v3.4.0
 COPY --from=docker.io/envoyproxy/envoy:v1.32-latest /usr/local/bin/envoy /usr/local/bin/envoy
 
 # Copy vllm-sr router binary and libs from the vllm-sr image
-COPY --from=ghcr.io/vllm-project/semantic-router/vllm-sr:latest /usr/local/bin/router /usr/local/bin/router
-COPY --from=ghcr.io/vllm-project/semantic-router/vllm-sr:latest /usr/local/lib/libcandle_semantic_router.so /usr/local/lib/
-COPY --from=ghcr.io/vllm-project/semantic-router/vllm-sr:latest /usr/local/lib/libml_semantic_router.so /usr/local/lib/
-COPY --from=ghcr.io/vllm-project/semantic-router/vllm-sr:latest /usr/local/lib/libnlp_binding.so /usr/local/lib/
+COPY --from=quay.io/eformat/vllm-sr:latest /usr/local/bin/router /usr/local/bin/router
+COPY --from=quay.io/eformat/vllm-sr:latest /usr/local/lib/libcandle_semantic_router.so /usr/local/lib/
+COPY --from=quay.io/eformat/vllm-sr:latest /usr/local/lib/libml_semantic_router.so /usr/local/lib/
+COPY --from=quay.io/eformat/vllm-sr:latest /usr/local/lib/libnlp_binding.so /usr/local/lib/
 
 # Copy c2o runtime files
 COPY .c2o/entrypoint.sh /usr/local/bin/c2o-entrypoint
