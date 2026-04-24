@@ -17,6 +17,9 @@ import os
 import http.client
 import socket
 import ssl
+import subprocess
+import threading
+import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pathlib import Path
@@ -38,8 +41,10 @@ def load_config():
         # Fallback to defaults
         config = {
             "models": {
-                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7"]
+                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7",
+                                 "claude-sonnet-4-6", "claude-opus-4-6"]
             },
+            "claude_direct_bypass": False,
             "timeouts": {"http_request": 1200},
             "network": {"ports": {"anthropic_proxy": 8819}},
             "logging": {"level": "INFO"},
@@ -65,7 +70,9 @@ UPSTREAM_HOST = os.getenv("UPSTREAM_HOST", "vllm-sr-envoy")
 UPSTREAM_PORT = int(os.getenv("UPSTREAM_PORT", "8899"))
 
 # Models known to vllm-sr — pass these through as-is.
-KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus"]))
+KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7",
+                                                                  "claude-sonnet-4-6", "claude-opus-4-6"]))
+CLAUDE_DIRECT_BYPASS = config.get("claude_direct_bypass", False)
 
 # Request size limits
 MAX_BODY_SIZE = 10 * 1024 * 1024  # 10MB
@@ -118,6 +125,25 @@ def get_gcp_token() -> str:
 class ProxyError(Exception):
     """Custom exception for proxy errors."""
     pass
+
+
+# --- Agent task tracking ---
+
+_agent_tasks = {}  # task_id -> {"pid": int, "process": Popen}
+_agent_tasks_lock = threading.Lock()
+
+
+def _kill_process(proc, grace_period=5):
+    """SIGTERM, then SIGKILL after grace period."""
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace_period)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    except Exception:
+        pass
 
 
 # ---------- Request translation: Anthropic -> OpenAI ----------
@@ -592,8 +618,125 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+    def _handle_agent_task(self):
+        """POST /v1/agent/task — run claude -p and stream output as SSE."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b""
+
+        try:
+            req = json.loads(body)
+        except json.JSONDecodeError as e:
+            self._send_json_error(400, f"Invalid JSON: {e}")
+            return
+
+        prompt = req.get("prompt", "")
+        model = req.get("model", "claude-sonnet-4-6")
+        working_dir = req.get("working_dir")
+
+        if not prompt:
+            self._send_json_error(400, "prompt is required")
+            return
+
+        task_id = uuid.uuid4().hex[:8]
+        cmd = [
+            "claude", "-p", prompt,
+            "--model", model,
+            "--output-format", "stream-json",
+            "--permission-mode", "bypassPermissions",
+            "--verbose",
+        ]
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=working_dir,
+                text=True,
+            )
+        except Exception as e:
+            self._send_json_error(500, f"Failed to start claude: {e}")
+            return
+
+        with _agent_tasks_lock:
+            _agent_tasks[task_id] = {"pid": proc.pid, "process": proc}
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.send_header("X-Task-Id", task_id)
+        self.end_headers()
+
+        def write_sse(event, data):
+            self.wfile.write(f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n".encode())
+            self.wfile.flush()
+
+        try:
+            write_sse("task_started", {"task_id": task_id, "pid": proc.pid})
+
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    write_sse(event.get("type", "message"), event)
+                except json.JSONDecodeError:
+                    write_sse("log", {"text": line})
+
+            proc.wait()
+            stderr_out = proc.stderr.read() if proc.stderr else ""
+
+            write_sse("task_finished", {
+                "task_id": task_id,
+                "exit_code": proc.returncode,
+                "stderr": stderr_out[:1000] if stderr_out else "",
+            })
+        except (BrokenPipeError, ConnectionResetError):
+            _kill_process(proc)
+        except Exception as e:
+            log.exception("Error streaming agent task")
+            try:
+                write_sse("error", {"message": str(e)})
+            except Exception:
+                pass
+            _kill_process(proc)
+        finally:
+            with _agent_tasks_lock:
+                _agent_tasks.pop(task_id, None)
+
+    def _handle_agent_cancel(self, task_id):
+        """POST /v1/agent/task/<id>/cancel — kill a running agent task."""
+        with _agent_tasks_lock:
+            task = _agent_tasks.get(task_id)
+
+        if not task:
+            self._send_json_error(404, f"No active task '{task_id}'")
+            return
+
+        _kill_process(task["process"])
+
+        out = json.dumps({"task_id": task_id, "status": "cancelled"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
     def do_POST(self):
         path = self.path.split("?")[0]
+
+        if path == "/v1/agent/task":
+            self._handle_agent_task()
+            return
+
+        if path.startswith("/v1/agent/task/") and path.endswith("/cancel"):
+            parts = path.split("/")
+            if len(parts) == 6:
+                self._handle_agent_cancel(parts[4])
+                return
+
         if path != "/v1/messages":
             self._send_json_error(404, "Not found")
             return
@@ -616,8 +759,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         client_wants_stream = anthropic_req.get("stream", False)
         model = anthropic_req.get("model", "auto")
 
-        # Direct path for Claude models → Vertex AI (native Anthropic format)
-        if is_claude_model(model):
+        # Direct path for Claude models -> Vertex AI (native Anthropic format)
+        # Bypasses semantic router. Enable via config for debugging or fallback.
+        if CLAUDE_DIRECT_BYPASS and is_claude_model(model):
             self._handle_claude_direct(anthropic_req, model, client_wants_stream)
             return
 
@@ -830,17 +974,29 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return None, None
 
     def do_GET(self):
-        if self.path == "/health":
+        path = self.path.split("?")[0]
+
+        if path == "/health":
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write(b"ok")
             return
 
-        if self.path == "/v1/models":
-            # Return list of available models
+        if path == "/v1/models":
             models = [{"id": m, "object": "model", "owned_by": "vllm-sr"} for m in KNOWN_MODELS]
             response = json.dumps({"object": "list", "data": models}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            return
+
+        if path == "/v1/agent/tasks":
+            with _agent_tasks_lock:
+                tasks = {tid: {"pid": t["pid"]} for tid, t in _agent_tasks.items()}
+            response = json.dumps(tasks).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(response)))
