@@ -88,6 +88,14 @@ GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
 GCP_TOKEN_HOST = os.getenv("GCP_TOKEN_HOST", "localhost")
 GCP_TOKEN_PORT = int(os.getenv("GCP_TOKEN_PORT", "8888"))
 
+# Versioned model name → short router name for semantic router routing.
+# The router config knows models by short names (e.g., "claude-sonnet"),
+# but clients send versioned names (e.g., "claude-sonnet-4-6").
+MODEL_ALIASES = {
+    "claude-sonnet-4-6": "claude-sonnet",
+    "claude-opus-4-6": "claude-opus",
+}
+
 # Short name → full Anthropic model ID for Vertex AI URL
 CLAUDE_MODEL_MAP = {
     "claude-sonnet": "claude-sonnet-4-6",
@@ -164,6 +172,8 @@ def translate_request(req):
         raise ProxyError("Request body must be a JSON object")
 
     model = req.get("model", "auto")
+    # Map versioned names to short router names (e.g., claude-sonnet-4-6 → claude-sonnet)
+    model = MODEL_ALIASES.get(model, model)
     if model not in KNOWN_MODELS:
         model = "auto"
         log.debug(f"Unknown model '{req.get('model')}', remapping to 'auto'")
