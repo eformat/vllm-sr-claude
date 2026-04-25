@@ -18,7 +18,7 @@ gcp:
 endpoints:
   kimi:
     host: "${KIMI_HOST:-kimi.example.com}"
-    path: "/kimi-k25/kimi-k2-5/v1"
+    path: "/prelude-maas/kimi-k2-6/v1"
     port: 443
   vertex_ai:
     host: "us-east5-aiplatform.googleapis.com"
@@ -29,14 +29,14 @@ endpoints:
 # Model configuration
 models:
   kimi:
-    name: "kimi-k2-5"
+    name: "kimi-k2-6"
   claude:
     name: "claude-sonnet-4-6"
     provider_model_id: "claude-sonnet"
   # Models known to vllm-sr for proxy passthrough
   known_models:
     - "auto"
-    - "kimi-k2-5"
+    - "kimi-k2-6"
     - "claude-sonnet"
     - "claude-opus"
     - "claude-opus-4-7"

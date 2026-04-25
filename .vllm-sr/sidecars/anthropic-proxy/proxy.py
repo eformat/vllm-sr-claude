@@ -41,7 +41,7 @@ def load_config():
         # Fallback to defaults
         config = {
             "models": {
-                "known_models": ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7",
+                "known_models": ["auto", "kimi-k2-6", "claude-sonnet", "claude-opus", "claude-opus-4-7",
                                  "claude-sonnet-4-6", "claude-opus-4-6"]
             },
             "claude_direct_bypass": False,
@@ -70,7 +70,7 @@ UPSTREAM_HOST = os.getenv("UPSTREAM_HOST", "vllm-sr-envoy")
 UPSTREAM_PORT = int(os.getenv("UPSTREAM_PORT", "8899"))
 
 # Models known to vllm-sr — pass these through as-is.
-KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-5", "claude-sonnet", "claude-opus", "claude-opus-4-7",
+KNOWN_MODELS = set(config.get("models", {}).get("known_models", ["auto", "kimi-k2-6", "claude-sonnet", "claude-opus", "claude-opus-4-7",
                                                                   "claude-sonnet-4-6", "claude-opus-4-6"]))
 CLAUDE_DIRECT_BYPASS = config.get("claude_direct_bypass", False)
 

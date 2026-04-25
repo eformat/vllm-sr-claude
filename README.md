@@ -60,7 +60,7 @@ Claude Code ──> Anthropic Proxy (:8819) ──> ext_proc (:50051) ──> ro
                                                    |
                                                    v
                                              Upstream:
-                                               kimi-k2-5     --> MaaS
+                                               kimi-k2-6     --> MaaS
                                                claude-sonnet --> Vertex AI
                                                claude-opus     --> Vertex AI (4.6)
                                                claude-opus-4-7 --> Vertex AI (4.7, when available)
@@ -182,8 +182,8 @@ Check which model handled it with `| jq .model`.
 |----------|--------|----------|-----------|-----------|
 | 95 | opus_keywords | architect, design pattern, system design, algorithm design, complex, performance optimization, refactor entire, rewrite... | claude-opus | enabled |
 | 90 | deep_analysis_keywords | analyze, explain why, compare, evaluate, critique, pros and cons, trade-offs, implications, nuance... | claude-sonnet | enabled |
-| 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-5 | disabled |
-| 1 | (default) | everything else | kimi-k2-5 | disabled |
+| 80 | coding_keywords | implement, refactor, debug, function, class, code, fix, bug, test, deploy, script... | kimi-k2-6 | disabled |
+| 1 | (default) | everything else | kimi-k2-6 | disabled |
 
 Reasoning enables Anthropic's extended thinking for complex tasks at higher latency/cost. When enabled, the router injects a `thinking` block with a 10,000-token budget into the Anthropic API request. The thinking output is returned as `reasoning_content` in the OpenAI-compatible response, with token usage reported in `completion_tokens_details.reasoning_tokens`. Disabled for fast coding responses.
 

@@ -13,19 +13,19 @@ listeners:
 
 providers:
   defaults:
-    default_model: kimi-k2-5
+    default_model: kimi-k2-6
     default_reasoning_effort: high
     reasoning_families:
       gpt:
         type: reasoning_effort
         parameter: reasoning.effort
   models:
-    - name: kimi-k2-5
-      provider_model_id: kimi-k2-5
+    - name: kimi-k2-6
+      provider_model_id: kimi-k2-6
       api_format: openai
       backend_refs:
         - name: remote-primary
-          base_url: https://${KIMI_HOST}/kimi-k25/kimi-k2-5/v1
+          base_url: https://${KIMI_HOST}/prelude-maas/kimi-k2-6/v1
           provider: openai
           auth_header: Authorization
           auth_prefix: Bearer
@@ -67,7 +67,7 @@ providers:
 
 routing:
   modelCards:
-    - name: kimi-k2-5
+    - name: kimi-k2-6
       modality: text
       capabilities:
         - chat
@@ -203,7 +203,7 @@ routing:
           - type: keyword
             name: coding_keywords
       modelRefs:
-        - model: kimi-k2-5
+        - model: kimi-k2-6
           use_reasoning: false
 
     - name: default-route
@@ -213,7 +213,7 @@ routing:
         operator: AND
         conditions: []
       modelRefs:
-        - model: kimi-k2-5
+        - model: kimi-k2-6
           use_reasoning: false
 
 global:

@@ -4,9 +4,9 @@
 #   ./hack/test-tool-calls.sh [agent-instance]
 #   ./hack/test-tool-calls.sh agent1
 #
-# Tests claude-sonnet, claude-opus, and kimi-k2-5 via the anthropic proxy.
+# Tests claude-sonnet, claude-opus, and kimi-k2-6 via the anthropic proxy.
 # claude-opus-4-7 is pre-configured but not yet available on Vertex AI.
-# To include it in tests: MODELS="claude-sonnet claude-opus claude-opus-4-7 kimi-k2-5" ./hack/test-tool-calls.sh
+# To include it in tests: MODELS="claude-sonnet claude-opus claude-opus-4-7 kimi-k2-6" ./hack/test-tool-calls.sh
 # Each test sends a simple prompt requiring a real tool call and checks
 # the response contains a tool_use block (not hallucinated XML text).
 
@@ -20,7 +20,7 @@ export KUBECONFIG
 if [[ -n "${MODELS:-}" ]]; then
     read -ra MODELS <<< "$MODELS"
 else
-    MODELS=("claude-sonnet" "claude-opus" "kimi-k2-5")
+    MODELS=("claude-sonnet" "claude-opus" "kimi-k2-6")
 fi
 PASS=0
 FAIL=0

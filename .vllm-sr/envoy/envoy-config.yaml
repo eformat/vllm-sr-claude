@@ -34,15 +34,15 @@ static_resources:
               domains: ["*"]
               routes:
               
-              # Route for model: kimi-k2-5
+              # Route for model: kimi-k2-6
               - match:
                   prefix: "/"
                   headers:
                   - name: x-selected-model
                     string_match:
-                      exact: "kimi-k2-5"
+                      exact: "kimi-k2-6"
                 route:
-                  cluster: kimi_k2_5_cluster
+                  cluster: kimi_k2_6_cluster
                   timeout: 1200s
                   idleTimeout: 1200s
                   # Rewrite Host header to match upstream server
@@ -109,7 +109,7 @@ static_resources:
                 route:
 
                   # Route to first model by default
-                  cluster: kimi_k2_5_cluster
+                  cluster: kimi_k2_6_cluster
 
                   timeout: 1200s
 
@@ -190,8 +190,8 @@ static_resources:
                 port_value: 50051
   
   
-  # Cluster for model: kimi-k2-5
-  - name: kimi_k2_5_cluster
+  # Cluster for model: kimi-k2-6
+  - name: kimi_k2_6_cluster
     connect_timeout: 1200s
     type: LOGICAL_DNS
 
@@ -199,7 +199,7 @@ static_resources:
 
     lb_policy: ROUND_ROBIN
     load_assignment:
-      cluster_name: kimi_k2_5_cluster
+      cluster_name: kimi_k2_6_cluster
       endpoints:
       - lb_endpoints:
 

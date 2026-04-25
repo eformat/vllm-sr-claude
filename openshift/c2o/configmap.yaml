@@ -15,19 +15,19 @@ data:
 
     providers:
       defaults:
-        default_model: kimi-k2-5
+        default_model: kimi-k2-6
         default_reasoning_effort: high
         reasoning_families:
           gpt:
             type: reasoning_effort
             parameter: reasoning.effort
       models:
-        - name: kimi-k2-5
-          provider_model_id: kimi-k2-5
+        - name: kimi-k2-6
+          provider_model_id: kimi-k2-6
           api_format: openai
           backend_refs:
             - name: remote-primary
-              base_url: https://$(KIMI_HOST)/kimi-k25/kimi-k2-5/v1
+              base_url: https://$(KIMI_HOST)/prelude-maas/kimi-k2-6/v1
               provider: openai
               auth_header: Authorization
               auth_prefix: Bearer
@@ -69,7 +69,7 @@ data:
 
     routing:
       modelCards:
-        - name: kimi-k2-5
+        - name: kimi-k2-6
           modality: text
           capabilities:
             - chat
@@ -203,7 +203,7 @@ data:
               - type: keyword
                 name: coding_keywords
           modelRefs:
-            - model: kimi-k2-5
+            - model: kimi-k2-6
               use_reasoning: false
         - name: default-route
           description: Default route to Kimi
@@ -212,7 +212,7 @@ data:
             operator: AND
             conditions: []
           modelRefs:
-            - model: kimi-k2-5
+            - model: kimi-k2-6
               use_reasoning: false
 
     global:
@@ -261,9 +261,9 @@ data:
                       headers:
                       - name: x-selected-model
                         string_match:
-                          exact: "kimi-k2-5"
+                          exact: "kimi-k2-6"
                     route:
-                      cluster: kimi_k2_5_cluster
+                      cluster: kimi_k2_6_cluster
                       timeout: 300s
                       idleTimeout: 1200s
                       host_rewrite_literal: "${KIMI_HOST}"
@@ -318,7 +318,7 @@ data:
                   - match:
                       prefix: "/"
                     route:
-                      cluster: kimi_k2_5_cluster
+                      cluster: kimi_k2_6_cluster
                       timeout: 300s
                       host_rewrite_literal: "${KIMI_HOST}"
               http_filters:
@@ -383,13 +383,13 @@ data:
                   socket_address:
                     address: 127.0.0.1
                     port_value: 50051
-      - name: kimi_k2_5_cluster
+      - name: kimi_k2_6_cluster
         connect_timeout: 1200s
         type: LOGICAL_DNS
         dns_lookup_family: V4_ONLY
         lb_policy: ROUND_ROBIN
         load_assignment:
-          cluster_name: kimi_k2_5_cluster
+          cluster_name: kimi_k2_6_cluster
           endpoints:
           - lb_endpoints:
             - endpoint:

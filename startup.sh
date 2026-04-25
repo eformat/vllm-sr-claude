@@ -68,17 +68,17 @@ if [ "${1:-}" == "--test" ]; then
     run_test "Prometheus targets" curl -sf http://localhost:9090/-/ready
     run_test "Grafana health" curl -sf http://localhost:3000/api/health
 
-    # OpenAI API — coding request → should route to kimi-k2-5
+    # OpenAI API — coding request → should route to kimi-k2-6
     echo -e "\n🌴 ${ORANGE}Routing tests (OpenAI API :8899)...${NC}"
     CODING_RESP=$(curl -s --max-time 60 http://localhost:8899/v1/chat/completions \
         -H "Content-Type: application/json" \
         -d '{"model":"auto","messages":[{"role":"user","content":"implement a hello world function in python"}],"max_tokens":50}' 2>&1)
     CODING_MODEL=$(echo "$CODING_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('model',''))" 2>/dev/null || true)
-    if [ "$CODING_MODEL" = "kimi-k2-5" ]; then
-        echo -e "  ${GREEN}✓${NC} Coding request → kimi-k2-5"
+    if [ "$CODING_MODEL" = "kimi-k2-6" ]; then
+        echo -e "  ${GREEN}✓${NC} Coding request → kimi-k2-6"
         PASS=$((PASS + 1))
     else
-        echo -e "  ${RED}✗${NC} Coding request → expected kimi-k2-5, got: ${CODING_MODEL:-no response}"
+        echo -e "  ${RED}✗${NC} Coding request → expected kimi-k2-6, got: ${CODING_MODEL:-no response}"
         FAIL=$((FAIL + 1))
     fi
 

@@ -2,7 +2,7 @@
 
 ## Project overview
 
-vllm-sr-claude is a semantic router that routes LLM requests to the cheapest capable model based on content analysis. It sits between clients (Claude Code, SDKs, curl) and model backends (Kimi K2-5, Claude Sonnet on Vertex AI, Claude Opus on Vertex AI). The core value is cost optimization — coding tasks go to Kimi (cheapest), analysis to Sonnet, architecture to Opus.
+vllm-sr-claude is a semantic router that routes LLM requests to the cheapest capable model based on content analysis. It sits between clients (Claude Code, SDKs, curl) and model backends (Kimi K2-6, Claude Sonnet on Vertex AI, Claude Opus on Vertex AI). The core value is cost optimization — coding tasks go to Kimi (cheapest), analysis to Sonnet, architecture to Opus.
 
 Deployable locally via Podman or as a single pod on OpenShift (c2o mode). The c2o MCP server orchestrates remote Claude Code agents running in OpenShift pods.
 
@@ -66,7 +66,7 @@ Image: `quay.io/eformat/c2o:latest`
 ## Testing
 
 ```bash
-# Tool call tests against a deployed agent (tests claude-sonnet, claude-opus, kimi-k2-5)
+# Tool call tests against a deployed agent (tests claude-sonnet, claude-opus, kimi-k2-6)
 ./hack/test-tool-calls.sh agent1
 ./hack/test-tool-calls.sh agent2
 
@@ -97,8 +97,8 @@ Configured in `vllm-sr-config.yaml`. Keyword-based matching, evaluated by priori
 |----------|--------|-------|-----------|
 | 95 | `opus_keywords` (architecture, design, security audit...) | Claude Opus | Enabled |
 | 80 | `deep_analysis_keywords` (analyze, investigate, compare...) | Claude Sonnet | Enabled |
-| 60 | `coding_keywords` (implement, refactor, debug, test...) | Kimi K2-5 | Disabled |
-| 1 | Default (no match) | Kimi K2-5 | Disabled |
+| 60 | `coding_keywords` (implement, refactor, debug, test...) | Kimi K2-6 | Disabled |
+| 1 | Default (no match) | Kimi K2-6 | Disabled |
 
 ## Proxy endpoints
 
