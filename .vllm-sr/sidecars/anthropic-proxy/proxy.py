@@ -18,6 +18,7 @@ import http.client
 import socket
 import ssl
 import subprocess
+import time
 import threading
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -800,15 +801,37 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         if upstream_resp.status != 200:
             error_body = upstream_resp.read().decode("utf-8", errors="replace")
-            log.warning(f"Upstream error (status={upstream_resp.status}): {error_body[:500]}")
-            body = json.dumps({"error": {"type": "proxy_error", "message": f"Upstream error: {error_body}"}})
-            self.send_response(upstream_resp.status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body.encode())
             conn.close()
-            return
+            # Retry once on empty completion (Vertex AI rate-limit pattern)
+            if '"total_tokens":0' in error_body or '"prompt_tokens":0' in error_body:
+                log.warning(f"Empty completion from upstream (status={upstream_resp.status}), retrying after 2s backoff")
+                time.sleep(2)
+                upstream_resp, conn = self._upstream_request(openai_req)
+                if upstream_resp is not None and upstream_resp.status == 200:
+                    log.info("Backoff retry succeeded")
+                else:
+                    if upstream_resp is not None:
+                        error_body = upstream_resp.read().decode("utf-8", errors="replace")
+                        conn.close()
+                    else:
+                        error_body = "retry also failed"
+                    log.warning(f"Backoff retry also failed: {error_body[:500]}")
+                    body = json.dumps({"error": {"type": "proxy_error", "message": f"Upstream error: {error_body}"}})
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body.encode())
+                    return
+            else:
+                log.warning(f"Upstream error (status={upstream_resp.status}): {error_body[:500]}")
+                body = json.dumps({"error": {"type": "proxy_error", "message": f"Upstream error: {error_body}"}})
+                self.send_response(upstream_resp.status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body.encode())
+                return
 
         is_real_stream = openai_req.get("stream", False)
 
