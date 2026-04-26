@@ -19,16 +19,20 @@ chmod +x "$WORKSPACE/c2o-mcp-server.py"
 echo "=== Downloading CLAUDE.md ==="
 curl -fsSL "$REPO_RAW/.c2o/supervisor/CLAUDE.md" -o "$WORKSPACE/CLAUDE.md"
 
-echo "=== Creating .mcp.json ==="
-cat > "$WORKSPACE/.mcp.json" << 'EOF'
+INSTANCES="${C2O_INSTANCES:-agent1,agent2}"
+NAMESPACE="${C2O_NAMESPACE:-c2o-agents}"
+
+echo "=== Creating .mcp.json (workers: $INSTANCES) ==="
+cat > "$WORKSPACE/.mcp.json" <<EOF
 {
   "mcpServers": {
     "c2o-agents": {
       "command": "python3",
       "args": ["/home/user/workspace/c2o-mcp-server.py"],
       "env": {
-        "C2O_NAMESPACE": "c2o-agents",
-        "C2O_MODE": "incluster"
+        "C2O_NAMESPACE": "$NAMESPACE",
+        "C2O_MODE": "incluster",
+        "C2O_INSTANCES": "$INSTANCES"
       }
     }
   }
