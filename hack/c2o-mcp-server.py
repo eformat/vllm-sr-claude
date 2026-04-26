@@ -23,6 +23,9 @@ SA_NAMESPACE_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
 
 def detect_mode():
+    override = os.environ.get("C2O_MODE", "").lower()
+    if override in ("incluster", "local"):
+        return override
     if os.path.exists(SA_TOKEN_PATH):
         return "incluster"
     return "local"
@@ -75,8 +78,13 @@ def kube_cmd():
     return "oc" if MODE == "local" else "kubectl"
 
 
+KNOWN_INSTANCES = [i.strip() for i in os.environ.get("C2O_INSTANCES", "agent1,agent2").split(",") if i.strip()]
+
+
 async def get_pods() -> list[dict]:
     """Get all c2o agent pods in the namespace."""
+    if MODE == "incluster":
+        return await _discover_incluster()
     cmd = kube_cmd()
     rc, stdout, stderr = await run_cmd(
         cmd, "get", "pods",
@@ -105,6 +113,27 @@ async def get_pods() -> list[dict]:
             "phase": phase,
             "ready": ready,
         })
+    return pods
+
+
+async def _discover_incluster() -> list[dict]:
+    """Discover agents by probing their health endpoints."""
+    import httpx
+    pods = []
+    async with httpx.AsyncClient(timeout=5) as client:
+        for instance in KNOWN_INSTANCES:
+            url = f"http://c2o-anthropic-{instance}.{NAMESPACE}.svc.cluster.local:8819/health"
+            try:
+                resp = await client.get(url)
+                ready = resp.status_code == 200
+            except Exception:
+                ready = False
+            pods.append({
+                "instance": instance,
+                "pod": f"c2o-{instance} (service)",
+                "phase": "Running" if ready else "Unknown",
+                "ready": ready,
+            })
     return pods
 
 
@@ -568,6 +597,32 @@ async def get_agent_health(instance: str) -> str:
         return f"Agent '{instance}' health check returned empty response"
 
 
+async def _exec_via_task(instance: str, command: str, timeout: int = 60) -> str:
+    """In-cluster: run a shell command on an agent via its task endpoint."""
+    import httpx
+    url = f"http://c2o-anthropic-{instance}.{NAMESPACE}.svc.cluster.local:8819/v1/agent/task"
+    payload = {"prompt": f"Run this exact command and return only the output, no commentary: {command}", "model": "claude-sonnet-4-6"}
+    result_text = ""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=10)) as client:
+            async with client.stream("POST", url, json=payload) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    return f"Error ({resp.status_code}): {body.decode()}"
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    try:
+                        event = json.loads(line[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "result":
+                        result_text = event.get("result", "")
+    except Exception as e:
+        return f"Error: {e}"
+    return result_text or "(no output)"
+
+
 @mcp.tool()
 async def read_remote_file(instance: str, path: str) -> str:
     """Read a file from a c2o agent's workspace.
@@ -576,6 +631,8 @@ async def read_remote_file(instance: str, path: str) -> str:
         instance: Agent instance name, e.g. "agent1"
         path: File path inside the pod (e.g. /home/user/workspace/main.py)
     """
+    if MODE == "incluster":
+        return await _exec_via_task(instance, f"cat {path}")
     pod = await find_pod(instance)
     return await exec_in_pod(pod, ["cat", path])
 
@@ -588,6 +645,8 @@ async def get_agent_logs(instance: str, lines: int = 100) -> str:
         instance: Agent instance name, e.g. "agent1"
         lines: Number of log lines to retrieve (default: 100)
     """
+    if MODE == "incluster":
+        return await _exec_via_task(instance, f"journalctl --no-pager -n {lines} 2>/dev/null || tail -n {lines} /tmp/*.log 2>/dev/null || echo 'No logs available'")
     cmd = kube_cmd()
     rc, stdout, stderr = await run_cmd(
         cmd, "logs",
@@ -627,6 +686,8 @@ async def exec_on_agent(instance: str, command: str, timeout: int = 30) -> str:
         command: Shell command to run (passed to bash -c)
         timeout: Command timeout in seconds (default: 30)
     """
+    if MODE == "incluster":
+        return await _exec_via_task(instance, command, timeout=timeout)
     pod = await find_pod(instance)
     return await exec_in_pod(pod, ["bash", "-c", command], timeout=timeout)
 
@@ -639,6 +700,8 @@ async def list_remote_files(instance: str, path: str = "/home/user/workspace") -
         instance: Agent instance name, e.g. "agent1"
         path: Directory path to list (default: /home/user/workspace)
     """
+    if MODE == "incluster":
+        return await _exec_via_task(instance, f"find {path} -type f -maxdepth 3")
     pod = await find_pod(instance)
     return await exec_in_pod(pod, ["find", path, "-type", "f", "-maxdepth", "3"])
 
