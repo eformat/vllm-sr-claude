@@ -47,6 +47,10 @@ static_resources:
                   idleTimeout: 1200s
                   # Rewrite Host header to match upstream server
                   host_rewrite_literal: "${KIMI_HOST}"
+                  regex_rewrite:
+                    pattern:
+                      regex: "^/v1/(.*)"
+                    substitution: "/prelude-maas/kimi-k2-6/v1/\\1"
 
 
               # Route for model: claude-sonnet
@@ -115,6 +119,10 @@ static_resources:
 
                   # Rewrite Host header to match upstream server
                   host_rewrite_literal: "${KIMI_HOST}"
+                  regex_rewrite:
+                    pattern:
+                      regex: "^/v1/(.*)"
+                    substitution: "/prelude-maas/kimi-k2-6/v1/\\1"
                   
           http_filters:
           - name: envoy.filters.http.ext_proc
@@ -139,17 +147,8 @@ static_resources:
                   function envoy_on_request(request_handle)
                     local model = request_handle:headers():get("x-selected-model")
                     if model == "claude-sonnet" or model == "claude-opus" or model == "claude-opus-4-7" then
-                      -- Fix body FIRST (before httpCall which may stream it)
-                      local body_handle = request_handle:body()
-                      if body_handle and body_handle:length() > 0 then
-                        local raw = body_handle:getBytes(0, body_handle:length())
-                        local no_model = raw:gsub('"model":"[^"]*",?', '', 1)
-                        no_model = no_model:gsub(',%s*}', '}')
-                        local patched = no_model:gsub('^{', '{"anthropic_version":"vertex-2023-10-16",', 1)
-                        body_handle:setBytes(patched)
-                        request_handle:headers():replace("content-length", tostring(body_handle:length()))
-                      end
-                      -- Fetch a fresh GCP access token from the sidecar
+                      -- Body transformation (model stripping, anthropic_version) is handled
+                      -- by the ext_proc filter. Lua only injects the GCP auth token.
                       local headers, body = request_handle:httpCall(
                         "gcp_token_server",
                         { [":method"] = "GET", [":path"] = "/token", [":authority"] = "gcp-token-server" },

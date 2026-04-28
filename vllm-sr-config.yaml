@@ -182,6 +182,18 @@ routing:
       modelRefs:
         - model: claude-opus
           use_reasoning: true
+        - model: claude-sonnet
+          use_reasoning: true
+        - model: kimi-k2-6
+          use_reasoning: false
+      algorithm:
+        type: confidence
+        confidence:
+          on_error: skip
+          escalation_order: cost
+          confidence_method: avg_logprob
+          threshold: 0.1
+
     - name: deep-analysis-route
       description: Route complex reasoning and analysis tasks to Claude
       priority: 90
@@ -193,6 +205,17 @@ routing:
       modelRefs:
         - model: claude-sonnet
           use_reasoning: true
+        - model: claude-opus
+          use_reasoning: true
+        - model: kimi-k2-6
+          use_reasoning: false
+      algorithm:
+        type: confidence
+        confidence:
+          on_error: skip
+          escalation_order: cost
+          confidence_method: avg_logprob
+          threshold: 0.1
 
     - name: coding-route
       description: Route coding tasks to Kimi (internal, cheaper)
@@ -205,6 +228,17 @@ routing:
       modelRefs:
         - model: kimi-k2-6
           use_reasoning: false
+        - model: claude-sonnet
+          use_reasoning: false
+        - model: claude-opus
+          use_reasoning: false
+      algorithm:
+        type: confidence
+        confidence:
+          on_error: skip
+          escalation_order: cost
+          confidence_method: avg_logprob
+          threshold: 0.1
 
     - name: default-route
       description: Default route to Kimi for cost savings
@@ -215,6 +249,17 @@ routing:
       modelRefs:
         - model: kimi-k2-6
           use_reasoning: false
+        - model: claude-sonnet
+          use_reasoning: false
+        - model: claude-opus
+          use_reasoning: false
+      algorithm:
+        type: confidence
+        confidence:
+          on_error: skip
+          escalation_order: cost
+          confidence_method: avg_logprob
+          threshold: 0.1
 
 global:
   router:
